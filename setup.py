@@ -25,6 +25,8 @@ setup(
             "black>=22.0.0",
             "isort>=5.10.0",
             "jupyter>=1.0.0",
+            "boto3>=1.28.0",
+            "awscli>=1.29.0",
         ],
         "production": [
             "gunicorn>=20.0.0",
