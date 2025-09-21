@@ -5,31 +5,27 @@ import logging
 import yaml
 import os
 import boto3
-from io import StringIO
+from io import StringIO, BytesIO
+import zipfile
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def load_data_from_s3(bucket_name, file_key, aws_access_key_id=None, aws_secret_access_key=None):
-    """Загрузка данных из S3"""
+def load_data_from_s3(bucket_name, file_key, endpoint_url=None, aws_access_key_id=None, aws_secret_access_key=None, region_name='ru-central1'):
+    """Загрузка данных из S3-совместимого хранилища"""
     logger.info(f"Загрузка данных из s3://{bucket_name}/{file_key}")
     
-    # Создание клиента S3
-    if aws_access_key_id and aws_secret_access_key:
-        s3 = boto3.client('s3', 
-                          aws_access_key_id=aws_access_key_id,
-                          aws_secret_access_key=aws_secret_access_key)
-    else:
-        # Используем IAM роли или credentials из окружения
-        s3 = boto3.client('s3')
-    
-    # Загрузка данных
     try:
-        response = s3.get_object(Bucket=bucket_name, Key=file_key)
-        data = response['Body'].read().decode('utf-8')
-        df = pd.read_csv(StringIO(data))
-        return df
+        s3 = boto3.client('s3',
+                          endpoint_url=endpoint_url or 'https://storage.yandexcloud.net',
+                          aws_access_key_id=aws_access_key_id,
+                          aws_secret_access_key=aws_secret_access_key,
+                          region_name=region_name)
+        
+        # Загрузка данных
+        s3.download_file(bucket_name, file_s3_src, file_local)
+        
     except Exception as e:
         logger.error(f"Ошибка при загрузке данных из S3: {str(e)}")
         raise
@@ -71,7 +67,7 @@ def split_data(df, target_column, test_size=0.2, random_state=42):
     
     return train_test_split(X, y, test_size=test_size, random_state=random_state)
 
-def save_data(train_data, test_data, train_path, test_path):
+def save_data(X_train, X_test, y_train, y_test, train_path, test_path):
     """Сохранение обучающей и тестовой выборок в CSV файлы"""
     logger.info(f"Сохранение обучающих данных в {train_path}")
     logger.info(f"Сохранение тестовых данных в {test_path}")
@@ -81,30 +77,29 @@ def save_data(train_data, test_data, train_path, test_path):
     os.makedirs(os.path.dirname(test_path), exist_ok=True)
     
     # Сохранение данных
-    pd.DataFrame(train_data).to_csv(train_path, index=False)
-    pd.DataFrame(test_data).to_csv(test_path, index=False)
+    X_train.to_csv(train_path, index=False)
+    X_test.to_csv(test_path, index=False)
     
     # Сохранение целевых переменных
-    pd.DataFrame({'target': train_data['target']}).to_csv(train_path.replace('.csv', '_target.csv'), index=False)
-    pd.DataFrame({'target': test_data['target']}).to_csv(test_path.replace('.csv', '_target.csv'), index=False)
+    pd.DataFrame({'target': y_train}).to_csv(train_path.replace('.csv', '_target.csv'), index=False)
+    pd.DataFrame({'target': y_test}).to_csv(test_path.replace('.csv', '_target.csv'), index=False)
 
-def upload_to_s3(local_file_path, bucket_name, s3_key, aws_access_key_id=None, aws_secret_access_key=None):
-    """Загрузка файла в S3"""
+def upload_to_s3(local_file_path, bucket_name, s3_key, endpoint_url=None, aws_access_key_id=None, aws_secret_access_key=None, region_name='ru-central1'):
+    """Загрузка файла в S3-совместимое хранилище"""
     logger.info(f"Загрузка {local_file_path} в s3://{bucket_name}/{s3_key}")
     
-    # Создание клиента S3
-    if aws_access_key_id and aws_secret_access_key:
-        s3 = boto3.client('s3', 
-                          aws_access_key_id=aws_access_key_id,
-                          aws_secret_access_key=aws_secret_access_key)
-    else:
-        # Используем IAM роли или credentials из окружения
-        s3 = boto3.client('s3')
-    
-    # Загрузка файла
     try:
+        # Создание клиента S3
+        s3 = boto3.client('s3',
+                          endpoint_url=endpoint_url or f'https://storage.yandexcloud.net',
+                          aws_access_key_id=aws_access_key_id,
+                          aws_secret_access_key=aws_secret_access_key,
+                          region_name=region_name)
+        
+        # Загрузка файла
         s3.upload_file(local_file_path, bucket_name, s3_key)
         logger.info(f"Файл успешно загружен в S3: s3://{bucket_name}/{s3_key}")
+        
     except Exception as e:
         logger.error(f"Ошибка при загрузке файла в S3: {str(e)}")
         raise
@@ -115,20 +110,29 @@ def main():
     with open('configs/config.yaml', 'r') as f:
         config = yaml.safe_load(f)
     
-    # Для обратной совместимости будем использовать config для всех параметров
+    # Параметры из конфигурации
     params = config
     
     # Параметры S3 из переменных окружения
-    s3_bucket = os.getenv('S3_BUCKET')
-    s3_raw_data_key = os.getenv('S3_RAW_DATA_KEY', 'data/raw/data.csv')
+    s3_bucket = os.getenv('S3_BUCKET', 's3-dvc')
+    s3_raw_data_key = os.getenv('S3_RAW_DATA_KEY', 'Датасет.zip')
     s3_processed_prefix = os.getenv('S3_PROCESSED_PREFIX', 'data/processed/')
     aws_access_key_id = os.getenv('AWS_ACCESS_KEY_ID')
     aws_secret_access_key = os.getenv('AWS_SECRET_ACCESS_KEY')
+    endpoint_url = os.getenv('AWS_ENDPOINT_URL', 'https://storage.yandexcloud.net')
+    region_name = os.getenv('AWS_REGION', 'ru-central1')
     
     try:
         # Загрузка сырых данных из S3 или локально
-        if s3_bucket:
-            df = load_data_from_s3(s3_bucket, s3_raw_data_key, aws_access_key_id, aws_secret_access_key)
+        if s3_bucket and aws_access_key_id and aws_secret_access_key:
+            df = load_data_from_s3(
+                s3_bucket, 
+                s3_raw_data_key, 
+                endpoint_url, 
+                aws_access_key_id, 
+                aws_secret_access_key,
+                region_name
+            )
         else:
             raw_data_path = os.path.join(config['data']['raw_path'], 'data.csv')
             df = load_data(raw_data_path)
@@ -152,27 +156,20 @@ def main():
         train_path = os.path.join(config['data']['processed_path'], config['data']['train_file'])
         test_path = os.path.join(config['data']['processed_path'], config['data']['test_file'])
         
-        # Создание директорий, если они не существуют
-        os.makedirs(config['data']['processed_path'], exist_ok=True)
+        save_data(X_train, X_test, y_train, y_test, train_path, test_path)
         
-        # Сохранение данных
-        X_train.to_csv(train_path, index=False)
-        X_test.to_csv(test_path, index=False)
-        pd.DataFrame(y_train).to_csv(train_path.replace('.csv', '_target.csv'), index=False)
-        pd.DataFrame(y_test).to_csv(test_path.replace('.csv', '_target.csv'), index=False)
-        
-        # Загрузка обработанных данных в S3, если указан bucket
-        if s3_bucket:
+        # Загрузка обработанных данных в S3, если указаны credentials
+        if s3_bucket and aws_access_key_id and aws_secret_access_key:
             upload_to_s3(train_path, s3_bucket, s3_processed_prefix + config['data']['train_file'], 
-                         aws_access_key_id, aws_secret_access_key)
+                         endpoint_url, aws_access_key_id, aws_secret_access_key, region_name)
             upload_to_s3(test_path, s3_bucket, s3_processed_prefix + config['data']['test_file'], 
-                         aws_access_key_id, aws_secret_access_key)
+                         endpoint_url, aws_access_key_id, aws_secret_access_key, region_name)
             upload_to_s3(train_path.replace('.csv', '_target.csv'), s3_bucket, 
                          s3_processed_prefix + config['data']['train_file'].replace('.csv', '_target.csv'), 
-                         aws_access_key_id, aws_secret_access_key)
+                         endpoint_url, aws_access_key_id, aws_secret_access_key, region_name)
             upload_to_s3(test_path.replace('.csv', '_target.csv'), s3_bucket, 
                          s3_processed_prefix + config['data']['test_file'].replace('.csv', '_target.csv'), 
-                         aws_access_key_id, aws_secret_access_key)
+                         endpoint_url, aws_access_key_id, aws_secret_access_key, region_name)
         
         logger.info("Подготовка данных успешно завершена")
         

@@ -54,9 +54,9 @@ MANIFEST
 # MLflow
 mlruns/
 
-# DVC
-.dvc/tmp
-.dvc/cache
+# Data
+data
+data/*
 
 # Cookiecutter
 hack_digital_transformation/
