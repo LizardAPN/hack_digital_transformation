@@ -1,5 +1,4 @@
 import os
-import shutil
 import zipfile
 from pathlib import Path
 
@@ -55,22 +54,3 @@ def extract_zip_advanced(zip_path, extract_to, remove_after_extract=False):
     except Exception as e:
         print(f"Ошибка при разархивировании: {e}")
         return None
-
-
-def move_and_remove_files(source_dir, destination_dir, remove_after_move=False):
-    if source_dir.exists() and source_dir.is_dir():
-        for item in source_dir.iterdir():
-            try:
-                shutil.move(str(item), str(destination_dir))
-                print(f"Перенесен: {item.name}")
-            except Exception as e:
-                print(f"Ошибка при переносе {item.name}: {e}")
-
-        if remove_after_move:
-            # Удаляем теперь пустую папку
-            try:
-                source_dir.rmdir()  # Удаляем пустую папку
-                print(f"Пустая папка удалена: {source_dir}")
-            except OSError:
-                print(f"Папка не пуста, используем rmtree")
-                shutil.rmtree(source_dir)
