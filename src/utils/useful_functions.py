@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.spatial import KDTree
 
 
 def move_and_remove_files(source_dir, destination_dir, remove_after_move=False):
@@ -37,43 +38,32 @@ def extract_coordinates(coord_string):
     return None, None
 
 
-def calculate_distance(lat1, lon1, lat2, lon2):
-    R = 6371000
-
-    lat1_rad = radians(lat1)
-    lon1_rad = radians(lon1)
-    lat2_rad = radians(lat2)
-    lon2_rad = radians(lon2)
-
-    dlat = lat2_rad - lat1_rad
-    dlon = lon2_rad - lon1_rad
-
-    a = sin(dlat / 2) ** 2 + cos(lat1_rad) * cos(lat2_rad) * sin(dlon / 2) ** 2
-    c = 2 * atan2(sqrt(a), sqrt(1 - a))
-
-    return R * c
-
-
 def merge_tables_with_tolerance(df1, df2, max_distance_meters=100):
+    # Переименование колонок
+    df1 = df1.rename(columns={df1.columns[0]: "filename", df1.columns[2]: "lat_target", df1.columns[1]: "lon_target"})
+    df2 = df2.rename(columns={df2.columns[0]: "camera_id", df2.columns[1]: "lat_real", df2.columns[2]: "lon_real"})
 
-    df1 = df1.rename(columns={df1.columns[0]: "filename", df1.columns[1]: "lat1", df1.columns[2]: "lon1"})
+    # Преобразование координат в радианы для сферического расстояния
+    coords1 = np.radians(df1[["lat_target", "lon_target"]].values)
+    coords2 = np.radians(df2[["lat_real", "lon_real"]].values)
 
-    df2 = df2.rename(columns={df2.columns[0]: "camera_id", df2.columns[1]: "lat2", df2.columns[2]: "lon2"})
+    # Создание KDTree для быстрого поиска
+    tree = KDTree(coords2)
 
-    df1["key"] = 1
-    df2["key"] = 1
-    combinations = pd.merge(df1, df2, on="key").drop("key", axis=1)
+    # Поиск ближайшей точки в df2 для каждой точки в df1
+    distances, indices = tree.query(coords1, k=1)  # k=1 для одной ближайшей точки
 
-    combinations["distance_m"] = combinations.apply(
-        lambda row: calculate_distance(row["lat1"], row["lon1"], row["lat2"], row["lon2"]), axis=1
-    )
+    # Преобразование расстояний из радиан в метры (Earth's radius ≈ 6371000 m)
+    distances_m = distances * 6371000
 
-    closest_matches = combinations.loc[combinations.groupby("filename")["distance_m"].idxmin()]
+    # Создание результирующего DataFrame
+    result = df1.copy()
+    result["distance_m"] = distances_m
+    result["camera_id"] = df2.iloc[indices]["camera_id"].values
+    result["lat_real"] = df2.iloc[indices]["lat_real"].values
+    result["lon_real"] = df2.iloc[indices]["lon_real"].values
 
-    result = closest_matches[closest_matches["distance_m"] <= max_distance_meters].copy()
+    # Фильтрация по максимальному расстоянию
+    result = result[result["distance_m"] <= max_distance_meters].sort_values("distance_m")
 
-    result = result.sort_values("distance_m")
-
-    result = result.reset_index(drop=True)
-
-    return result
+    return result.reset_index(drop=True)
