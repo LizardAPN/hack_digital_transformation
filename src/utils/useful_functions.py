@@ -38,10 +38,16 @@ def extract_coordinates(coord_string):
     return None, None
 
 
-def merge_tables_with_tolerance(df1, df2, max_distance_meters=100):
+def merge_tables_with_tolerance(target, 
+                                real_data, 
+                                target_lat_name: str = 'latitude',
+                                target_lot_name: str = 'longitude',
+                                real_data_lat_name: str = 'latitude',
+                                real_data_lot_name: str = 'longitude',
+                                max_distance_meters=100):
     # Переименование колонок
-    df1 = df1.rename(columns={df1.columns[0]: "filename", df1.columns[2]: "lat_target", df1.columns[1]: "lon_target"})
-    df2 = df2.rename(columns={df2.columns[0]: "camera_id", df2.columns[1]: "lat_real", df2.columns[2]: "lon_real"})
+    df1 = target.rename(columns={target.columns[0]: "filename", target.columns[target_lat_name]: "lat_target", target.columns[target_lot_name]: "lon_target"})
+    df2 = real_data.rename(columns={real_data.columns[0]: "camera_id", real_data.columns[real_data_lat_name]: "lat_real", real_data.columns[real_data_lot_name]: "lon_real"})
 
     # Преобразование координат в радианы для сферического расстояния
     coords1 = np.radians(df1[["lat_target", "lon_target"]].values)
