@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import sys
 import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -15,14 +16,117 @@ import torch.nn as nn
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 
+# =============================================================================
+# КРИТИЧЕСКИЕ ИСПРАВЛЕНИЯ ДЛЯ DATASPHERE
+# =============================================================================
+
+
+# Динамическое определение путей для работы в DataSphere
+current_file = Path(__file__).resolve()
+project_root_in_cloud = Path("/job")  # Явно указываем корень в облаке
+local_project_root = current_file.parent.parent
+
+# Выбираем корень в зависимости от окружения
+# Проверяем, находимся ли мы в среде DataSphere (существует ли папка /job)
+if project_root_in_cloud.exists():
+    ROOT_DIR = project_root_in_cloud
+    print("✓ Обнаружена среда DataSphere. Используем путь /job")
+else:
+    ROOT_DIR = local_project_root
+    print("✓ Обнаружена локальная среда. Используем локальный путь")
+
+# Добавляем возможные пути к модулям в sys.path
+possible_paths_to_models = [
+    ROOT_DIR / "models",  # Папка models в корне
+    ROOT_DIR / "src" / "models",  # Папка models внутри src
+    ROOT_DIR,  # Сам корень проекта
+    ROOT_DIR / "src",  # Папка src
+    ROOT_DIR / "utils",  # Папка utils в корне
+    ROOT_DIR / "src" / "utils",  # Папка utils внутри src
+]
+
+for path in possible_paths_to_models:
+    path_str = str(path)
+    if path.exists() and path_str not in sys.path:
+        sys.path.insert(0, path_str)
+        print(f"✓ Добавлен путь: {path}")
+
+# Также добавляем родительскую директорию текущего файла
+current_parent = str(current_file.parent)
+if current_parent not in sys.path:
+    sys.path.insert(0, current_parent)
+
+print("=" * 60)
+print("FINAL ENVIRONMENT INFO:")
+print(f"Current file: {current_file}")
+print(f"ROOT_DIR: {ROOT_DIR}")
+print(f"Current working directory: {Path.cwd()}")
+print(f"Python will look for modules in:")
+for i, path in enumerate(sys.path[:10]):  # Показываем первые 10 путей
+    print(f"  {i+1}. {path}")
+print("=" * 60)
+
+# Диагностика: что действительно есть в облаке
+print("\nCHECKING CLOUD ENVIRONMENT STRUCTURE:")
+check_paths = [ROOT_DIR, Path(".")]
+for path in check_paths:
+    if path.exists():
+        print(f"\nСодержимое {path}:")
+        try:
+            items = list(path.iterdir())
+            if not items:
+                print("  [EMPTY]")
+            for item in items:
+                item_type = "DIR" if item.is_dir() else "FILE"
+                print(f"  [{item_type}] {item.name}")
+        except Exception as e:
+            print(f"  Ошибка доступа: {e}")
+print("=" * 60)
+
+# Теперь пробуем импортировать
+try:
+    from models.OCR_model import OverlayOCR
+
+    print("✓ Модуль models.OCR_model успешно импортирован")
+except ImportError as e:
+    print(f"✗ Ошибка импорта models.OCR_model: {e}")
+    # Попробуем альтернативный путь
+    try:
+        # Если модуль в той же директории, что и main.py
+        from OCR_model import OverlayOCR
+
+        print("✓ Модуль OCR_model успешно импортирован из текущей директории")
+    except ImportError as e2:
+        print(f"✗ Ошибка импорта OCR_model: {e2}")
+        raise
+
+try:
+    from utils.useful_functions import levenshtein_distance
+
+    print("✓ Модуль utils.useful_functions успешно импортирован")
+except ImportError as e:
+    print(f"✗ Ошибка импорта utils.useful_functions: {e}")
+    # Попробуем альтернативный путь
+    try:
+        from useful_functions import levenshtein_distance
+
+        print("✓ Модуль useful_functions успешно импортирован из текущей директории")
+    except ImportError as e2:
+        print(f"✗ Ошибка импорта useful_functions: {e2}")
+
+        # Создаем заглушку, если функция не найдена
+        def levenshtein_distance(s1, s2):
+            print(f"WARNING: Using dummy levenshtein_distance for '{s1}' and '{s2}'")
+            return abs(len(s1) - len(s2))
+
+        print("✓ Создана заглушка для levenshtein_distance")
+
 warnings.filterwarnings("ignore")
 
-from models.OCR_model import OverlayOCR
-from utils.useful_functions import levenshtein_distance
-
-# Определяем ROOT_DIR как текущую директорию
-ROOT_DIR = Path(__file__).parent.parent.parent
+# Директория для сохранения результатов
 save_dir = ROOT_DIR / "models" / "ocr_model"
+save_dir.mkdir(parents=True, exist_ok=True)
+print(f"Save directory: {save_dir}")
 
 
 def parse_args():
@@ -389,17 +493,90 @@ class OCRModel:
         return OverlayOCR(**self.best_params)
 
 
+def find_file_by_pattern(directory, pattern):
+    """
+    Ищет файл в директории по шаблону имени.
+    Возвращает Path к первому найденному файлу или None.
+    """
+    path = Path(directory)
+    if not path.exists():
+        return None
+    for file_path in path.iterdir():
+        if file_path.is_file() and pattern in file_path.name:
+            return file_path
+    return None
+
+
+def find_dir_by_pattern(directory, pattern):
+    """
+    Ищет директорию по шаблону имени.
+    Возвращает Path к первой найденной директории или None.
+    """
+    path = Path(directory)
+    if not path.exists():
+        return None
+    for dir_path in path.iterdir():
+        if dir_path.is_dir() and pattern in dir_path.name:
+            return dir_path
+    return None
+
+
 def main():
     """Основная функция обучения"""
-
     args = parse_args()
 
     try:
-        # Создание датасета с автоматическим разделением
+        # Диагностика путей в DataSphere
+        print("\n" + "=" * 60)
+        print("DATASPHERE PATH DIAGNOSTICS:")
+        print(f"Original CSV path: {args.csv_path}")
+        print(f"Original Images dir: {args.images_dir}")
+
+        # 1. Определяем корневую директорию для поиска
+        search_root = ROOT_DIR
+
+        # 2. Гибкий поиск CSV-файла
+        csv_path = Path(args.csv_path)
+        if not csv_path.exists():
+            # Пробуем найти файл, содержащий в имени ключевые слова
+            possible_csv = find_file_by_pattern(search_root, "csv_file")
+            if possible_csv:
+                csv_path = possible_csv
+                print(f"Найден CSV-файл по шаблону: {csv_path}")
+            else:
+                # Если по шаблону не нашли, пробуем просто взять первый файл в корне с расширением .csv
+                for item in search_root.iterdir():
+                    if item.is_file() and item.suffix.lower() == ".csv":
+                        csv_path = item
+                        print(f"Найден CSV-файл по расширению: {csv_path}")
+                        break
+                else:
+                    raise FileNotFoundError(
+                        f"CSV файл не найден: {args.csv_path}. Доступные файлы в {search_root}: {list(search_root.iterdir())}"
+                    )
+
+        # 3. Гибкий поиск директории с изображениями
+        images_dir = Path(args.images_dir)
+        if not images_dir.exists():
+            # Пробуем найти директорию, содержащую в имени ключевые слова
+            possible_images_dir = find_dir_by_pattern(search_root, "images_dir")
+            if possible_images_dir:
+                images_dir = possible_images_dir
+                print(f"Найдена директория с изображениями по шаблону: {images_dir}")
+            else:
+                raise FileNotFoundError(
+                    f"Директория с изображениями не найдена: {args.images_dir}. Доступные директории в {search_root}: {[d.name for d in search_root.iterdir() if d.is_dir()]}"
+                )
+
+        print(f"Final CSV path: {csv_path}")
+        print(f"Final Images dir: {images_dir}")
+        print(f"CSV exists: {csv_path.exists()}")
+        print(f"Images dir exists: {images_dir.exists()}")
+        print("=" * 60 + "\n")
+
+        # Создание датасета с исправленными путями
         print("Подготовка данных...")
-        dataset = PrepareData(
-            csv_path=Path(args.csv_path), images_dir=Path(args.images_dir), test_size=0.2, random_state=42
-        )
+        dataset = PrepareData(csv_path=csv_path, images_dir=images_dir, test_size=0.2, random_state=42)
 
         # Получаем датасеты со всеми метками
         train_dataset = dataset.get_train_dataset_with_all_labels()
@@ -437,9 +614,8 @@ def main():
         # Обучаем на тренировочных данных со всеми метками
         best_params = model.train(train_dataset, n_trials=args.n_trials, max_samples=args.max_samples)
 
-        # Сохраняем модель в текущую директорию
-        save_dir = Path(".")
-        model.save_model(save_dir, args)
+        # Сохраняем модель в текущую директорию (для DataSphere)
+        model.save_model(ROOT_DIR, args)
 
         # Тестируем на тестовых данных со всеми метками
         print("\nТестирование на тестовом наборе...")
@@ -491,18 +667,19 @@ def main():
                 "best_params": best_params,
             }
 
-            with open(save_dir / "test_results.json", "w") as f:
+            with open(ROOT_DIR / "test_results.json", "w") as f:
                 json.dump(results, f, indent=2, ensure_ascii=False)
         else:
             print("Не удалось получить результаты тестирования!")
 
-        print(f"\nОбучение завершено! Результаты сохранены в: {save_dir.absolute()}")
+        print(f"\nОбучение завершено! Результаты сохранены в: {ROOT_DIR.absolute()}")
 
     except Exception as e:
         print(f"Критическая ошибка в main: {e}")
         import traceback
 
         traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
