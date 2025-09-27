@@ -1,10 +1,11 @@
+from pathlib import Path
+
 import pandas as pd
 import torch
-from torch.utils.data import Dataset, DataLoader
-from sklearn.model_selection import train_test_split
-from pathlib import Path
-from PIL import Image
 import torchvision.transforms as transforms
+from PIL import Image
+from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader, Dataset
 
 
 class PrepareData(Dataset):
@@ -42,19 +43,21 @@ class PrepareData(Dataset):
             Random state для воспроизводимости, by default 42
         """
         self.images_dir = Path(images_dir)
-        self.transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-        ])
-        
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+            ]
+        )
+
         # Загрузка данных из CSV
         self.df = pd.read_csv(csv_path)
         print(f"Загружено {len(self.df)} записей из CSV-файла")
-        
+
         # Фильтрация данных по наличию изображений
         self._filter_by_images()
         print(f"После фильтрации по изображениям осталось {len(self.df)} записей")
-        
+
         # Разделение данных
         if len(self.df) > 0:
             self._split_data(test_size, random_state)
@@ -66,8 +69,10 @@ class PrepareData(Dataset):
         Фильтрация данных по наличию изображений.
         """
         # Проверяем, что файлы изображений существуют
-        image_files = set(f.name for f in self.images_dir.iterdir() if f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png'])
-        self.df = self.df[self.df['camera_id'].isin(image_files)]
+        image_files = set(
+            f.name for f in self.images_dir.iterdir() if f.is_file() and f.suffix.lower() in [".jpg", ".jpeg", ".png"]
+        )
+        self.df = self.df[self.df["camera_id"].isin(image_files)]
         self.df = self.df.reset_index(drop=True)
 
     def _split_data(self, test_size, random_state):
@@ -85,7 +90,7 @@ class PrepareData(Dataset):
             self.train_indices = []
             self.test_indices = []
             return
-            
+
         # Разделение индексов
         indices = list(range(len(self.df)))
         self.train_indices, self.test_indices = train_test_split(
@@ -165,14 +170,14 @@ class PrepareData(Dataset):
             Кортеж из изображения и координат (тензор изображения, тензор координат).
         """
         row = self.df.iloc[idx]
-        image_path = self.images_dir / row['camera_id']
-        
+        image_path = self.images_dir / row["camera_id"]
+
         # Загрузка изображения
-        image = Image.open(image_path).convert('RGB')
+        image = Image.open(image_path).convert("RGB")
         if self.transform:
             image = self.transform(image)
-        
+
         # Получение координат
-        coordinates = torch.tensor([row['lat_real'], row['lon_real']], dtype=torch.float32)
-        
+        coordinates = torch.tensor([row["lat_real"], row["lon_real"]], dtype=torch.float32)
+
         return image, coordinates
