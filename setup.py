@@ -15,7 +15,6 @@ setup(
         "scikit-learn>=1.0.0",
         "matplotlib>=3.5.0",
         "seaborn>=0.11.0",
-        "dvc>=2.0.0",
     ],
     extras_require={
         "dev": [

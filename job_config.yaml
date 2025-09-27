@@ -1,20 +1,24 @@
-name: digital_hack_ml_job  # Уникальное имя задания
-desc: "Джоба для проведения экспериментов по созданию CV модели для определения местоположения по фотографии" # Описание
+name: digital_hack_ml_job
+desc: "Джоба для проведения экспериментов по созданию CV модели для определения местоположения по фотографии"
 
-# Команда для запуска. ${VARIABLE} - шаблоны, заменяемые на значения из `inputs`
-cmd: python src/engine/main.py #--input ${INPUT_FILE}
+# Команда для запуска
+cmd: python src/engine/main.py --csv-path csv_file_mob --images-dir images_dir_dzk/
 
-# передать в DataSphere код и зависимости pip
+# Используйте python: auto для автоматического определения версии Python
 env:
   python: auto
 
-# Входные данные (файлы или каталоги)
-#inputs:
-#  - input_data.txt: INPUT_FILE  
+# Входные данные (обновите алиасы)
+inputs:
+  - data/processed_data/merged_data.csv: csv_file_mob
+  - data/raw_data/data/metadata/INC/united_image: images_dir_dzk
+  - src/models: models
+  - src/utils: utils
 
-# Выходные данные (файлы или каталоги, которые вернутся с облака)
-#outputs:
-#  - output_results.zip
-#  - logs.txt
+# Выходные данные
+outputs:
+  - optuna_study.pkl: optuna_study
+  - ocr_model_params.json: ocr_model_params
+  - test_results.json: test_results
 
 cloud-instance-type: gt4.1

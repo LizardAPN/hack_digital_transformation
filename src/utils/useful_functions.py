@@ -1,7 +1,10 @@
+import collections
+import itertools
 import os
 import re
 import shutil
 import zipfile
+from itertools import zip_longest
 from math import atan2, cos, radians, sin, sqrt
 from pathlib import Path
 
@@ -38,16 +41,32 @@ def extract_coordinates(coord_string):
     return None, None
 
 
-def merge_tables_with_tolerance(target, 
-                                real_data, 
-                                target_lat_name: str = 'latitude',
-                                target_lot_name: str = 'longitude',
-                                real_data_lat_name: str = 'latitude',
-                                real_data_lot_name: str = 'longitude',
-                                max_distance_meters=100):
+def merge_tables_with_tolerance(
+    target,
+    real_data,
+    target_lat_name="latitude",
+    target_lot_name="longitude",
+    real_data_lat_name="latitude",
+    real_data_lot_name="longitude",
+    max_distance_meters=100,
+):
+    # Проверка существования колонок
+    if target_lat_name not in target.columns:
+        raise ValueError(f"Колонка {target_lat_name} не найдена в target")
+    if target_lot_name not in target.columns:
+        raise ValueError(f"Колонка {target_lot_name} не найдена в target")
+    if real_data_lat_name not in real_data.columns:
+        raise ValueError(f"Колонка {real_data_lat_name} не найдена в real_data")
+    if real_data_lot_name not in real_data.columns:
+        raise ValueError(f"Колонка {real_data_lot_name} не найдена в real_data")
+
     # Переименование колонок
-    df1 = target.rename(columns={target.columns[0]: "filename", target.columns[target_lat_name]: "lat_target", target.columns[target_lot_name]: "lon_target"})
-    df2 = real_data.rename(columns={real_data.columns[0]: "camera_id", real_data.columns[real_data_lat_name]: "lat_real", real_data.columns[real_data_lot_name]: "lon_real"})
+    df1 = target.rename(
+        columns={target.columns[0]: "filename", target_lat_name: "lat_target", target_lot_name: "lon_target"}
+    )
+    df2 = real_data.rename(
+        columns={real_data.columns[0]: "camera_id", real_data_lat_name: "lat_real", real_data_lot_name: "lon_real"}
+    )
 
     # Преобразование координат в радианы для сферического расстояния
     coords1 = np.radians(df1[["lat_target", "lon_target"]].values)
@@ -73,3 +92,21 @@ def merge_tables_with_tolerance(target,
     result = result[result["distance_m"] <= max_distance_meters].sort_values("distance_m")
 
     return result.reset_index(drop=True)
+
+
+def levenshtein_distance(string1, string2):
+    """
+    >>> levenshtein_distance('AATZ', 'AAAZ')
+    1
+    >>> levenshtein_distance('AATZZZ', 'AAAZ')
+    3
+    """
+    distance = 0
+    if len(string1) < len(string2):
+        string1, string2 = string2, string1
+
+    # Заменяем itertools.izip_longest на zip_longest для Python 3
+    for i, v in zip_longest(string1, string2, fillvalue="-"):
+        if i != v:
+            distance += 1
+    return distance
