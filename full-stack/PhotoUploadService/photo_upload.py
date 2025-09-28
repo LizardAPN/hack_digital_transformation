@@ -7,6 +7,7 @@ import boto3
 from botocore.exceptions import ClientError
 from typing import List, Optional
 import logging
+import requests
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -20,6 +21,8 @@ AWS_ACCESS_KEY_ID = os.getenv("S3_ACCESS_KEY")
 AWS_SECRET_ACCESS_KEY = os.getenv("S3_SECRET_KEY")
 AWS_ENDPOINT_URL = os.getenv("S3_ENDPOINT")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET")
+# API endpoint for image processing
+IMAGE_PROCESSING_API_URL = os.getenv("IMAGE_PROCESSING_API_URL", "http://fastapi:8000")
 
 # Initialize S3 client
 s3_client = boto3.client(
@@ -28,6 +31,49 @@ s3_client = boto3.client(
     aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
     endpoint_url=AWS_ENDPOINT_URL,
 )
+
+
+def trigger_image_processing(image_path: str, request_id: str = None) -> bool:
+    """
+    Trigger image processing by calling the image processing API
+    
+    Args:
+        image_path: Path to the image in S3
+        request_id: Optional request ID for tracking
+        
+    Returns:
+        True if processing was triggered successfully, False otherwise
+    """
+    try:
+        # Prepare the request payload
+        payload = {
+            "image_path": image_path
+        }
+        
+        if request_id:
+            payload["request_id"] = request_id
+            
+        # Call the image processing API
+        response = requests.post(
+            f"{IMAGE_PROCESSING_API_URL}/process_image_async",
+            json=payload,
+            timeout=30
+        )
+        
+        # Check if the request was successful
+        if response.status_code == 200:
+            logger.info(f"Successfully triggered image processing for {image_path}")
+            return True
+        else:
+            logger.error(f"Failed to trigger image processing for {image_path}. Status code: {response.status_code}")
+            return False
+            
+    except requests.RequestException as e:
+        logger.error(f"Error triggering image processing for {image_path}: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error triggering image processing for {image_path}: {e}")
+        return False
 
 class PhotoResponse(BaseModel):
     id: int
@@ -123,10 +169,14 @@ async def upload_photo(
         cur.close()
         conn.close()
         
+        # Trigger image processing
+        processing_triggered = trigger_image_processing(photo_url, str(photo_id))
+        
         return {
             "id": photo_id,
             "photo_url": photo_url,
-            "created_at": created_at.isoformat() if hasattr(created_at, 'isoformat') else str(created_at)
+            "created_at": created_at.isoformat() if hasattr(created_at, 'isoformat') else str(created_at),
+            "processing_triggered": processing_triggered
         }
         
     except ClientError as e:

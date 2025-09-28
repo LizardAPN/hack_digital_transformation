@@ -7,7 +7,7 @@ s3_manager = S3Manager(
     access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
     endpoint_url=os.getenv("AWS_ENDPOINT_URL"),
     bucket_name=os.getenv("AWS_BUCKET_NAME"),
-    max_workers=4,
+    max_workers=32,
     chunk_size=8 * 1024 * 1024,
 )
 
