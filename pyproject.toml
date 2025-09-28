@@ -28,6 +28,7 @@ dev = [
     "flake8>=5.0.0",
     "black>=22.0.0",
     "isort>=5.10.0",
+    "ruff>=0.1.0",
     "jupyter>=1.0.0",
 ]
 production = [
@@ -37,7 +38,7 @@ production = [
 ]
 
 [tool.uv]
-dev-dependencies = ["pytest", "black", "isort", "jupyter"]
+dev-dependencies = ["pytest", "black", "isort", "ruff", "jupyter"]
 
 [tool.black]
 line-length = 120
@@ -55,3 +56,32 @@ exclude = '''
 [tool.isort]
 profile = "black"
 multi_line_output = 3
+
+[tool.ruff]
+line-length = 120
+select = [
+    "E", "W", "F", "I", "C", "B", "N", "D", "UP", "YTT", "ANN", "S", "BLE", "FBT", "B0", "A", "C4", "T10", "EXE", "ISC", "ICN", "G", "INP", "PIE", "PYI", "PT", "RUF"
+]
+extend-ignore = [
+    "D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107",  # Missing docstrings
+]
+target-version = "py311"
+
+[tool.flake8]
+max-line-length = 120
+ignore = [
+    "E203",  # Whitespace before ':'
+    "E266",  # Too many leading '#' for block comment
+    "E501",  # Line too long (handled by black)
+    "W503",  # Line break occurred before a binary operator
+    "D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107",  # Missing docstrings
+]
+exclude = [
+    ".git",
+    "__pycache__",
+    ".venv",
+    "build",
+    "dist",
+    "node_modules",
+]
+max-complexity = 10
