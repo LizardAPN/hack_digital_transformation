@@ -67,6 +67,7 @@ document.addEventListener('DOMContentLoaded', function() {
             uploadStatus.textContent = 'Upload successful!';
             uploadStatus.className = 'upload-status success';
             loadPhotos(); // Refresh photo grid
+            photoUploadInput.value = ''; // Reset file input to allow re-upload of same file
             setTimeout(() => {
                 uploadStatus.textContent = '';
                 uploadStatus.className = 'upload-status';
@@ -76,6 +77,7 @@ document.addEventListener('DOMContentLoaded', function() {
             uploadStatus.textContent = 'Upload failed. Please try again.';
             uploadStatus.className = 'upload-status error';
             console.error('Upload error:', error);
+            photoUploadInput.value = ''; // Reset file input to allow re-upload of same file
         });
     }
     
