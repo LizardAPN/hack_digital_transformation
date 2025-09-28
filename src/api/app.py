@@ -1,25 +1,39 @@
 import os
 from typing import Any, Dict, List, Optional
+from datetime import datetime
 
-import joblib
-import numpy as np
-import pandas as pd
-import yaml
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+import redis
+import json
 
 # Импортируем CV модель
 from src.models.cv_model import CVModel, create_cv_model
+# Импортируем Celery задачи
+from src.tasks.worker import process_image_task, batch_process_images_task
 
 # Инициализация FastAPI приложения
 app = FastAPI(
-    title="ML Model API", description="API для предоставления прогнозов модели машинного обучения", version="0.1.0"
+    title="Building Detector API", 
+    description="API для детекции зданий и определения координат на изображениях", 
+    version="1.0.0"
 )
 
 # Глобальные переменные для модели и конфигурации
 model = None
 config = None
 cv_model: Optional[CVModel] = None
+
+# Настройка подключения к базе данных
+DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/building_detector')
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Настройка подключения к Redis
+REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+redis_client = redis.Redis.from_url(REDIS_URL)
 
 
 class PredictionRequest(BaseModel):
@@ -39,6 +53,20 @@ class ImageProcessRequest(BaseModel):
     """Модель запроса для обработки изображения"""
 
     image_path: str
+
+
+class AsyncImageProcessRequest(BaseModel):
+    """Модель запроса для асинхронной обработки изображения"""
+    
+    image_path: str
+    request_id: Optional[str] = None
+
+
+class BatchImageProcessRequest(BaseModel):
+    """Модель запроса для пакетной обработки изображений"""
+    
+    image_paths: List[str]
+    request_id: Optional[str] = None
 
 
 class BuildingDetection(BaseModel):
@@ -77,22 +105,34 @@ class ImageProcessResponse(BaseModel):
     ocr_result: Optional[OCRResult] = None
 
 
+class AsyncTaskResponse(BaseModel):
+    """Модель ответа для асинхронной задачи"""
+    
+    task_id: str
+    request_id: Optional[str] = None
+    status: str = "started"
+    message: str = "Задача принята в обработку"
+
+
+class TaskStatusResponse(BaseModel):
+    """Модель ответа для статуса задачи"""
+    
+    task_id: str
+    request_id: Optional[str] = None
+    status: str
+    result: Optional[dict] = None
+    error: Optional[str] = None
+    progress: Optional[dict] = None
+
+
 def load_model_and_config():
     """Загрузка обученной модели и конфигурации"""
     global model, config
 
-    # Загрузка конфигурации
-    config_path = "configs/config.yaml"
-    if os.path.exists(config_path):
-        with open(config_path, "r") as f:
-            config = yaml.safe_load(f)
-
-    # Загрузка модели
-    model_path = "models/model.pkl"
-    if os.path.exists(model_path):
-        model = joblib.load(model_path)
-    else:
-        print(f"Предупреждение: Файл модели {model_path} не найден")
+    # В текущей архитектуре не используется загрузка модели ML
+    # Так как мы используем визуальный поиск по изображениям
+    model = None
+    config = None
 
 
 @app.on_event("startup")
@@ -120,25 +160,9 @@ async def health_check():
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(request: PredictionRequest):
     """Сделать прогноз с использованием обученной модели"""
-    if model is None:
-        raise HTTPException(status_code=500, detail="Модель не загружена")
-
-    try:
-        # Преобразование признаков в DataFrame
-        features_df = pd.DataFrame([request.features])
-
-        # Сделать прогноз
-        prediction = model.predict(features_df)[0]
-
-        # Получить вероятность прогноза, если доступна
-        probability = 0.0
-        if hasattr(model, "predict_proba"):
-            probabilities = model.predict_proba(features_df)[0]
-            probability = float(np.max(probabilities))
-
-        return PredictionResponse(prediction=int(prediction), probability=probability)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Ошибка прогнозирования: {str(e)}")
+    # В текущей архитектуре не используется модель ML для прогнозирования
+    # Так как мы используем визуальный поиск по изображениям
+    raise HTTPException(status_code=501, detail="Эндпоинт не реализован в текущей архитектуре")
 
 
 @app.post("/process_image", response_model=ImageProcessResponse)
@@ -184,6 +208,117 @@ async def process_image(request: ImageProcessRequest):
         return response
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Ошибка обработки изображения: {str(e)}")
+
+
+@app.post("/process_image_async", response_model=AsyncTaskResponse)
+async def process_image_async(request: AsyncImageProcessRequest):
+    """Асинхронная обработка изображения с помощью Celery"""
+    try:
+        # Используем request_id если предоставлен, иначе None
+        request_id = request.request_id
+        
+        # Отправляем задачу в Celery
+        task = process_image_task.delay(request.image_path, request_id)
+        
+        return AsyncTaskResponse(
+            task_id=task.id,
+            request_id=request_id,
+            status="started",
+            message="Задача принята в обработку"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка отправки задачи: {str(e)}")
+
+
+@app.post("/process_images_batch", response_model=AsyncTaskResponse)
+async def process_images_batch(request: BatchImageProcessRequest):
+    """Пакетная асинхронная обработка изображений с помощью Celery"""
+    try:
+        # Используем request_id если предоставлен, иначе None
+        request_id = request.request_id
+        
+        # Отправляем задачу в Celery
+        task = batch_process_images_task.delay(request.image_paths, request_id)
+        
+        return AsyncTaskResponse(
+            task_id=task.id,
+            request_id=request_id,
+            status="started",
+            message=f"Пакетная задача принята в обработку. Количество изображений: {len(request.image_paths)}"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка отправки пакетной задачи: {str(e)}")
+
+
+@app.get("/task/{task_id}", response_model=TaskStatusResponse)
+async def get_task_status(task_id: str):
+    """Получение статуса задачи по её ID"""
+    try:
+        # Проверяем статус задачи в Celery
+        from celery.result import AsyncResult
+        from src.tasks.worker import celery_app
+        
+        task_result = AsyncResult(task_id, app=celery_app)
+        
+        # Получаем прогресс задачи из Redis если она в процессе выполнения
+        progress = None
+        if task_result.state == 'PROGRESS':
+            progress = redis_client.get(f"task_progress:{task_id}")
+            if progress:
+                progress = json.loads(progress.decode('utf-8'))
+        
+        return TaskStatusResponse(
+            task_id=task_id,
+            status=task_result.state,
+            result=task_result.result if task_result.ready() else None,
+            error=str(task_result.info) if task_result.failed() else None,
+            progress=progress
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка получения статуса задачи: {str(e)}")
+
+
+@app.get("/tasks/request/{request_id}")
+async def get_tasks_by_request_id(request_id: str):
+    """Получение всех задач по request_id"""
+    try:
+        db = SessionLocal()
+        query = text("""
+            SELECT task_id, status, progress, total, created_at, updated_at
+            FROM tasks 
+            WHERE request_id = :request_id
+            ORDER BY created_at DESC
+        """)
+        
+        result = db.execute(query, {"request_id": request_id})
+        tasks = result.fetchall()
+        db.close()
+        
+        return {"request_id": request_id, "tasks": [dict(task) for task in tasks]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка получения задач: {str(e)}")
+
+
+@app.get("/results/latest")
+async def get_latest_results(limit: int = 10):
+    """Получение последних результатов обработки"""
+    try:
+        db = SessionLocal()
+        query = text("""
+            SELECT id, image_path, task_id, request_id, coordinates, address, 
+                   ocr_result, buildings, processed_at, error
+            FROM processing_results
+            ORDER BY processed_at DESC
+            LIMIT :limit
+        """)
+        
+        result = db.execute(query, {"limit": limit})
+        results = result.fetchall()
+        db.close()
+        
+        return {"results": [dict(result) for result in results]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка получения результатов: {str(e)}")
 
 
 @app.get("/model/info")
