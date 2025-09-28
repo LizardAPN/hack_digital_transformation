@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Register</title>
+	<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+	<div class="container">
+		<div class="card" role="region" aria-labelledby="register-title">
+			<div class="header">
+				<h1 id="register-title">Create an account</h1>
+				<p>Sign up for an account to get started</p>
+			</div>
+
+			<form class="form" action="#" method="post" autocomplete="on">
+				<label class="label" for="name">Full Name</label>
+				<input class="input" type="text" id="name" name="name" placeholder="John Doe" required />
+
+				<label class="label" for="email">Email</label>
+				<input class="input" type="email" id="email" name="email" placeholder="you@example.com" required />
+
+				<label class="label" for="password">Password</label>
+				<input class="input" type="password" id="password" name="password" placeholder="••••••••" minlength="6" required />
+
+				<label class="label" for="confirm-password">Confirm Password</label>
+				<input class="input" type="password" id="confirm-password" name="confirm-password" placeholder="••••••••" minlength="6" required />
+
+				<button class="button" type="submit">Sign up</button>
+			</form>
+
+			<div class="footer">
+				<span>Already have an account? </span><a href="login.html">Sign in</a>
+			</div>
+		</div>
+	</div>
+	<script src="register.js"></script>
+</body>
+</html>
