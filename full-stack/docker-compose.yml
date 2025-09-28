@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  nginx:
+    build: ./ngnix
+    ports:
+      - "80:80"
+    depends_on:
+      - fastapi
+      - photo-upload
+    networks:
+      - app-network
+
+  fastapi:
+    build: ./FastAPI
+    ports:
+      - "8000"
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgresql://appuser:apppassword@db:5432/appdb
+    networks:
+      - app-network
+
+  auth:
+    build: ./AuthService
+    ports:
+      - "8001"
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgresql://appuser:apppassword@db:5432/appdb
+    networks:
+      - app-network
+
+  photo-upload:
+    build: ./PhotoUploadService
+    ports:
+      - "8002"
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgresql://appuser:apppassword@db:5432/appdb
+      - S3_BUCKET=web-server
+      - S3_ENDPOINT=https://storage.yandexcloud.net
+      - S3_ACCESS_KEY=YCAJE3It1Ok3S-dnBCUSAO6iW
+      - S3_SECRET_KEY=YCNY5wtY03s2JeCjY1uaX_2lATIkeyJ0pDKCxXCC
+    networks:
+      - app-network
+
+  db:
+    build: ./DB
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=appuser
+      - POSTGRES_PASSWORD=apppassword
+      - POSTGRES_DB=appdb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+volumes:
+  pgdata:
