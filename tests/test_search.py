@@ -23,7 +23,7 @@ def test_search():
     extractor = FeatureExtractor()
 
     # Тестовое изображение (можно заменить на любой файл)
-    test_image_path = "/home/lizardapn/Hack_digital/hack_digital_transformation/data/processed_data/images_build/0a0b860f-bde7-42a6-9bc1-e8e0273fbdc8.jpg"
+    test_image_path = "/home/lizardapn/Hack_digital/hack_digital_transformation/data/processed_data/moscow_image/1850854291755864.jpeg"
     try:
         test_image = Image.open(test_image_path)
         if test_image.mode != "RGB":

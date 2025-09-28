@@ -1,24 +1,25 @@
+import json
 import os
-from typing import Any, Dict, List, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
+import redis
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-import redis
-import json
 
 # Импортируем CV модель
 from src.models.cv_model import CVModel, create_cv_model
+
 # Импортируем Celery задачи
-from src.tasks.worker import process_image_task, batch_process_images_task
+from src.tasks.worker import batch_process_images_task, process_image_task
 
 # Инициализация FastAPI приложения
 app = FastAPI(
-    title="Building Detector API", 
-    description="API для детекции зданий и определения координат на изображениях", 
-    version="1.0.0"
+    title="Building Detector API",
+    description="API для детекции зданий и определения координат на изображениях",
+    version="1.0.0",
 )
 
 # Глобальные переменные для модели и конфигурации
@@ -27,12 +28,12 @@ config = None
 cv_model: Optional[CVModel] = None
 
 # Настройка подключения к базе данных
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/building_detector')
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/building_detector")
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Настройка подключения к Redis
-REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 redis_client = redis.Redis.from_url(REDIS_URL)
 
 
@@ -57,14 +58,14 @@ class ImageProcessRequest(BaseModel):
 
 class AsyncImageProcessRequest(BaseModel):
     """Модель запроса для асинхронной обработки изображения"""
-    
+
     image_path: str
     request_id: Optional[str] = None
 
 
 class BatchImageProcessRequest(BaseModel):
     """Модель запроса для пакетной обработки изображений"""
-    
+
     image_paths: List[str]
     request_id: Optional[str] = None
 
@@ -107,7 +108,7 @@ class ImageProcessResponse(BaseModel):
 
 class AsyncTaskResponse(BaseModel):
     """Модель ответа для асинхронной задачи"""
-    
+
     task_id: str
     request_id: Optional[str] = None
     status: str = "started"
@@ -116,7 +117,7 @@ class AsyncTaskResponse(BaseModel):
 
 class TaskStatusResponse(BaseModel):
     """Модель ответа для статуса задачи"""
-    
+
     task_id: str
     request_id: Optional[str] = None
     status: str
@@ -216,15 +217,12 @@ async def process_image_async(request: AsyncImageProcessRequest):
     try:
         # Используем request_id если предоставлен, иначе None
         request_id = request.request_id
-        
+
         # Отправляем задачу в Celery
         task = process_image_task.delay(request.image_path, request_id)
-        
+
         return AsyncTaskResponse(
-            task_id=task.id,
-            request_id=request_id,
-            status="started",
-            message="Задача принята в обработку"
+            task_id=task.id, request_id=request_id, status="started", message="Задача принята в обработку"
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка отправки задачи: {str(e)}")
@@ -236,15 +234,15 @@ async def process_images_batch(request: BatchImageProcessRequest):
     try:
         # Используем request_id если предоставлен, иначе None
         request_id = request.request_id
-        
+
         # Отправляем задачу в Celery
         task = batch_process_images_task.delay(request.image_paths, request_id)
-        
+
         return AsyncTaskResponse(
             task_id=task.id,
             request_id=request_id,
             status="started",
-            message=f"Пакетная задача принята в обработку. Количество изображений: {len(request.image_paths)}"
+            message=f"Пакетная задача принята в обработку. Количество изображений: {len(request.image_paths)}",
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка отправки пакетной задачи: {str(e)}")
@@ -256,23 +254,24 @@ async def get_task_status(task_id: str):
     try:
         # Проверяем статус задачи в Celery
         from celery.result import AsyncResult
+
         from src.tasks.worker import celery_app
-        
+
         task_result = AsyncResult(task_id, app=celery_app)
-        
+
         # Получаем прогресс задачи из Redis если она в процессе выполнения
         progress = None
-        if task_result.state == 'PROGRESS':
+        if task_result.state == "PROGRESS":
             progress = redis_client.get(f"task_progress:{task_id}")
             if progress:
-                progress = json.loads(progress.decode('utf-8'))
-        
+                progress = json.loads(progress.decode("utf-8"))
+
         return TaskStatusResponse(
             task_id=task_id,
             status=task_result.state,
             result=task_result.result if task_result.ready() else None,
             error=str(task_result.info) if task_result.failed() else None,
-            progress=progress
+            progress=progress,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка получения статуса задачи: {str(e)}")
@@ -283,17 +282,19 @@ async def get_tasks_by_request_id(request_id: str):
     """Получение всех задач по request_id"""
     try:
         db = SessionLocal()
-        query = text("""
+        query = text(
+            """
             SELECT task_id, status, progress, total, created_at, updated_at
             FROM tasks 
             WHERE request_id = :request_id
             ORDER BY created_at DESC
-        """)
-        
+        """
+        )
+
         result = db.execute(query, {"request_id": request_id})
         tasks = result.fetchall()
         db.close()
-        
+
         return {"request_id": request_id, "tasks": [dict(task) for task in tasks]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка получения задач: {str(e)}")
@@ -304,18 +305,20 @@ async def get_latest_results(limit: int = 10):
     """Получение последних результатов обработки"""
     try:
         db = SessionLocal()
-        query = text("""
+        query = text(
+            """
             SELECT id, image_path, task_id, request_id, coordinates, address, 
                    ocr_result, buildings, processed_at, error
             FROM processing_results
             ORDER BY processed_at DESC
             LIMIT :limit
-        """)
-        
+        """
+        )
+
         result = db.execute(query, {"limit": limit})
         results = result.fetchall()
         db.close()
-        
+
         return {"results": [dict(result) for result in results]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка получения результатов: {str(e)}")
