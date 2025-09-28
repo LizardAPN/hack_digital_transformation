@@ -1,15 +1,15 @@
-фффimport os
+import os
 from typing import Any, Dict, List, Optional
 
 import joblib
 import numpy as np
 import pandas as pd
 import yaml
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 # Импортируем CV модель
-from src.models.cv_model import create_cv_model, CVModel
+from src.models.cv_model import CVModel, create_cv_model
 
 # Инициализация FastAPI приложения
 app = FastAPI(
@@ -37,13 +37,13 @@ class PredictionResponse(BaseModel):
 
 class ImageProcessRequest(BaseModel):
     """Модель запроса для обработки изображения"""
-    
+
     image_path: str
 
 
 class BuildingDetection(BaseModel):
     """Модель обнаруженного здания"""
-    
+
     bbox: List[float]  # [x1, y1, x2, y2]
     confidence: float
     area: Optional[float] = None
@@ -51,14 +51,14 @@ class BuildingDetection(BaseModel):
 
 class CoordinateResult(BaseModel):
     """Модель координат"""
-    
+
     lat: Optional[float] = None
     lon: Optional[float] = None
 
 
 class OCRResult(BaseModel):
     """Модель результата OCR"""
-    
+
     final: Optional[str] = None
     norm: Optional[str] = None
     joined: Optional[str] = None
@@ -68,7 +68,7 @@ class OCRResult(BaseModel):
 
 class ImageProcessResponse(BaseModel):
     """Модель ответа для обработки изображения"""
-    
+
     image_path: str
     processed_at: str
     coordinates: Optional[CoordinateResult] = None
@@ -151,31 +151,25 @@ async def process_image(request: ImageProcessRequest):
     try:
         # Обработка изображения
         result = cv_model.process_image(request.image_path)
-        
+
         # Преобразование результата в формат ответа
         response = ImageProcessResponse(
             image_path=result["image_path"],
             processed_at=result["processed_at"],
             buildings=[
-                BuildingDetection(
-                    bbox=building["bbox"],
-                    confidence=building["confidence"],
-                    area=building.get("area")
-                ) for building in result["buildings"]
-            ]
+                BuildingDetection(bbox=building["bbox"], confidence=building["confidence"], area=building.get("area"))
+                for building in result["buildings"]
+            ],
         )
-        
+
         # Добавляем координаты, если есть
         if result.get("coordinates"):
-            response.coordinates = CoordinateResult(
-                lat=result["coordinates"]["lat"],
-                lon=result["coordinates"]["lon"]
-            )
-        
+            response.coordinates = CoordinateResult(lat=result["coordinates"]["lat"], lon=result["coordinates"]["lon"])
+
         # Добавляем адрес, если есть
         if result.get("address"):
             response.address = result["address"]
-        
+
         # Добавляем OCR результат, если есть
         if result.get("ocr_result"):
             ocr_data = result["ocr_result"]
@@ -184,9 +178,9 @@ async def process_image(request: ImageProcessRequest):
                 norm=ocr_data["norm"] if ocr_data["norm"] else None,
                 joined=ocr_data["joined"] if ocr_data["joined"] else None,
                 confidence=ocr_data["confidence"] if ocr_data["confidence"] else None,
-                roi_name=ocr_data["roi_name"] if ocr_data["roi_name"] else None
+                roi_name=ocr_data["roi_name"] if ocr_data["roi_name"] else None,
             )
-        
+
         return response
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Ошибка обработки изображения: {str(e)}")
