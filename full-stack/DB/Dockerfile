@@ -9,14 +9,14 @@ ENV POSTGRES_USER=appuser \
     POSTGRES_PASSWORD=apppassword \
     POSTGRES_DB=appdb
 
-# Copy initialization script
-COPY init.sql /docker-entrypoint-initdb.d/
-
 # Expose PostgreSQL default port
 EXPOSE 5432
 
 # Persist database files
 VOLUME ["/var/lib/postgresql/data"]
+
+# Copy initialization scripts
+COPY init/ /docker-entrypoint-initdb.d/
 
 # Basic healthcheck to ensure DB is ready to accept connections
 HEALTHCHECK --interval=10s --timeout=5s --retries=5 CMD pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" || exit 1
