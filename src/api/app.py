@@ -1,12 +1,15 @@
-import os
-from typing import Any, Dict, List
+фффimport os
+from typing import Any, Dict, List, Optional
 
 import joblib
 import numpy as np
 import pandas as pd
 import yaml
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
+
+# Импортируем CV модель
+from src.models.cv_model import create_cv_model, CVModel
 
 # Инициализация FastAPI приложения
 app = FastAPI(
@@ -16,6 +19,7 @@ app = FastAPI(
 # Глобальные переменные для модели и конфигурации
 model = None
 config = None
+cv_model: Optional[CVModel] = None
 
 
 class PredictionRequest(BaseModel):
@@ -29,6 +33,48 @@ class PredictionResponse(BaseModel):
 
     prediction: int
     probability: float
+
+
+class ImageProcessRequest(BaseModel):
+    """Модель запроса для обработки изображения"""
+    
+    image_path: str
+
+
+class BuildingDetection(BaseModel):
+    """Модель обнаруженного здания"""
+    
+    bbox: List[float]  # [x1, y1, x2, y2]
+    confidence: float
+    area: Optional[float] = None
+
+
+class CoordinateResult(BaseModel):
+    """Модель координат"""
+    
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+
+
+class OCRResult(BaseModel):
+    """Модель результата OCR"""
+    
+    final: Optional[str] = None
+    norm: Optional[str] = None
+    joined: Optional[str] = None
+    confidence: Optional[float] = None
+    roi_name: Optional[str] = None
+
+
+class ImageProcessResponse(BaseModel):
+    """Модель ответа для обработки изображения"""
+    
+    image_path: str
+    processed_at: str
+    coordinates: Optional[CoordinateResult] = None
+    address: Optional[str] = None
+    buildings: List[BuildingDetection]
+    ocr_result: Optional[OCRResult] = None
 
 
 def load_model_and_config():
@@ -53,6 +99,8 @@ def load_model_and_config():
 async def startup_event():
     """Загрузка модели и конфигурации при запуске"""
     load_model_and_config()
+    global cv_model
+    cv_model = create_cv_model()
 
 
 @app.get("/")
@@ -65,7 +113,8 @@ async def root():
 async def health_check():
     """Эндпоинт проверки состояния"""
     model_status = "загружена" if model is not None else "не загружена"
-    return {"status": "здоровая", "model_status": model_status}
+    cv_model_status = "загружена" if cv_model is not None else "не загружена"
+    return {"status": "здоровая", "model_status": model_status, "cv_model_status": cv_model_status}
 
 
 @app.post("/predict", response_model=PredictionResponse)
@@ -90,6 +139,57 @@ async def predict(request: PredictionRequest):
         return PredictionResponse(prediction=int(prediction), probability=probability)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Ошибка прогнозирования: {str(e)}")
+
+
+@app.post("/process_image", response_model=ImageProcessResponse)
+async def process_image(request: ImageProcessRequest):
+    """Обработка изображения с помощью CV модели"""
+    global cv_model
+    if cv_model is None:
+        raise HTTPException(status_code=500, detail="CV модель не загружена")
+
+    try:
+        # Обработка изображения
+        result = cv_model.process_image(request.image_path)
+        
+        # Преобразование результата в формат ответа
+        response = ImageProcessResponse(
+            image_path=result["image_path"],
+            processed_at=result["processed_at"],
+            buildings=[
+                BuildingDetection(
+                    bbox=building["bbox"],
+                    confidence=building["confidence"],
+                    area=building.get("area")
+                ) for building in result["buildings"]
+            ]
+        )
+        
+        # Добавляем координаты, если есть
+        if result.get("coordinates"):
+            response.coordinates = CoordinateResult(
+                lat=result["coordinates"]["lat"],
+                lon=result["coordinates"]["lon"]
+            )
+        
+        # Добавляем адрес, если есть
+        if result.get("address"):
+            response.address = result["address"]
+        
+        # Добавляем OCR результат, если есть
+        if result.get("ocr_result"):
+            ocr_data = result["ocr_result"]
+            response.ocr_result = OCRResult(
+                final=ocr_data["final"] if ocr_data["final"] else None,
+                norm=ocr_data["norm"] if ocr_data["norm"] else None,
+                joined=ocr_data["joined"] if ocr_data["joined"] else None,
+                confidence=ocr_data["confidence"] if ocr_data["confidence"] else None,
+                roi_name=ocr_data["roi_name"] if ocr_data["roi_name"] else None
+            )
+        
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Ошибка обработки изображения: {str(e)}")
 
 
 @app.get("/model/info")
