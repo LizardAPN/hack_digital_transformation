@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Workbench</title>
+	<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+	<div class="container-workbench">
+		<div class="sidebar">
+			<div class="sidebar-header">
+				<h2>Actions</h2>
+			</div>
+			<div class="sidebar-actions">
+				<!-- Action buttons will be added here by JavaScript -->
+			</div>
+		</div>
+		
+		<div class="main-content">
+			<div class="header">
+				<h1>Photo Workbench</h1>
+				<p>Manage your photo collection</p>
+			</div>
+			
+			<!-- File upload form -->
+			<div class="upload-section">
+				<input type="file" id="photo-upload" accept="image/*" style="display: none;">
+				<button id="upload-button" class="upload-btn">Upload Photo</button>
+				<div id="upload-status" class="upload-status"></div>
+			</div>
+			
+			<div class="photo-grid" id="photo-grid">
+				<!-- Photo grid items will be added here by JavaScript -->
+				<!-- For now, we'll add a placeholder for the upload button -->
+				<div class="photo-card upload-card" id="add-photo-card">
+					<div class="plus-icon">+</div>
+					<p>Add Photo</p>
+				</div>
+			</div>
+			
+			<!-- Modal for viewing photos -->
+			<div id="photo-modal" class="modal">
+				<span class="close">&times;</span>
+				<img class="modal-content" id="modal-image">
+				<div id="modal-caption"></div>
+			</div>
+		</div>
+	</div>
+	<script src="logout.js"></script>
+	<script src="workbench.js"></script>
+</body>
+</html>
