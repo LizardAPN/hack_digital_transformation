@@ -1,3 +1,23 @@
+import sys
+from pathlib import Path
+
+# Добавляем путь к утилитам для корректной работы импортов
+utils_path = Path(__file__).resolve().parent.parent / "utils"
+if str(utils_path) not in sys.path:
+    sys.path.insert(0, str(utils_path))
+
+# Настраиваем пути проекта
+try:
+    from path_resolver import setup_project_paths
+    setup_project_paths()
+except ImportError:
+    # Если path_resolver недоступен, добавляем необходимые пути вручную
+    src_path = Path(__file__).resolve().parent.parent
+    paths_to_add = [src_path, src_path / "utils", src_path / "geo"]
+    for path in paths_to_add:
+        path_str = str(path)
+        if path.exists() and path_str not in sys.path:
+            sys.path.insert(0, path_str)
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -8,9 +28,9 @@ from PIL import Image
 # Импортируем существующие компоненты
 from .feature_extractor import FeatureExtractor
 from .OCR_model import OverlayOCR
-from ..data.faiss_indexer import FaissIndexer
-from ..geo.geocoder import geocode_coordinates
-from ..utils.config import DATA_PATHS, s3_manager
+from src.data.faiss_indexer import FaissIndexer
+from src.geo.geocoder import geocode_coordinates
+from src.utils.config import DATA_PATHS, s3_manager
 
 logger = logging.getLogger(__name__)
 
