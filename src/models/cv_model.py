@@ -5,13 +5,12 @@ from typing import Dict, List, Optional
 import numpy as np
 from PIL import Image
 
-from data.faiss_indexer import FaissIndexer
-from src.geo.geocoder import geocode_coordinates
-from utils.config import DATA_PATHS, s3_manager
-
 # Импортируем существующие компоненты
 from .feature_extractor import FeatureExtractor
 from .OCR_model import OverlayOCR
+from ..data.faiss_indexer import FaissIndexer
+from ..geo.geocoder import geocode_coordinates
+from ..utils.config import DATA_PATHS, s3_manager
 
 logger = logging.getLogger(__name__)
 

@@ -66,14 +66,18 @@ print("=" * 60)
 
 from utils.s3_optimize import S3Manager
 
-s3_manager = S3Manager(
-    key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-    access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-    endpoint_url=os.getenv("AWS_ENDPOINT_URL"),
-    bucket_name=os.getenv("AWS_BUCKET_NAME"),
-    max_workers=32,
-    chunk_size=8 * 1024 * 1024,
-)
+try:
+    s3_manager = S3Manager(
+        key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+        endpoint_url=os.getenv("AWS_ENDPOINT_URL"),
+        bucket_name=os.getenv("AWS_BUCKET_NAME"),
+        max_workers=32,
+        chunk_size=8 * 1024 * 1024,
+    )
+except ValueError:
+    # В тестовой среде без учетных данных AWS создаем заглушку
+    s3_manager = None
 
 # Настройки модели
 MODEL_CONFIG = {"model_name": "ResNet50", "input_size": (224, 224), "pooling": "avg"}
