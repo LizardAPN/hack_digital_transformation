@@ -26,8 +26,11 @@ dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "flake8>=5.0.0",
+    "flake8-nb>=0.5.1",
     "black>=22.0.0",
+    "black[jupyter]>=22.0.0",
     "isort>=5.10.0",
+    "nbstripout>=0.6.0",
     "ruff>=0.1.0",
     "jupyter>=1.0.0",
 ]
@@ -43,7 +46,7 @@ dev-dependencies = ["pytest", "black", "isort", "ruff", "jupyter"]
 [tool.black]
 line-length = 120
 target-version = ['py311']
-include = '\.pyi?$'
+include = '\.pyi?|\.ipynb$'
 exclude = '''
 /(
     \.git
