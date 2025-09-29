@@ -24,10 +24,10 @@ class S3Manager:
 
     def __init__(
         self,
-        key_id: str | None = None,
-        access_key: str | None = None,
-        endpoint_url: str | None = None,
-        bucket_name: str | None = None,
+        key_id: Optional[str] = None,
+        access_key: Optional[str] = None,
+        endpoint_url: Optional[str] = None,
+        bucket_name: Optional[str] = None,
         max_workers: int = 10,
         chunk_size: int = 8 * 1024 * 1024,  # 8MB chunks for multipart
     ):

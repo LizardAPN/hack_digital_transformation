@@ -1,23 +1,28 @@
+from typing import Dict, List, Any
 import json
 import os
 import pickle
 import time
+from pathlib import Path
 
 import torch
 
 from .faiss_indexer import FaissIndexer
 from ..models.feature_extractor import FeatureExtractor
-from ..utils.config import DATA_PATHS, s3_manager
+from ..utils.config import DATA_PATHS, s3_manager, PROJECT_ROOT
 
 
-def create_directories():
+def create_directories() -> None:
     """Создание необходимых директорий"""
-    os.makedirs("data/processed", exist_ok=True)
-    os.makedirs("data/index", exist_ok=True)
+    processed_dir = PROJECT_ROOT / "data" / "processed"
+    index_dir = PROJECT_ROOT / "data" / "index"
+    
+    processed_dir.mkdir(parents=True, exist_ok=True)
+    index_dir.mkdir(parents=True, exist_ok=True)
     print("Директории созданы")
 
 
-def validate_s3_connection():
+def validate_s3_connection() -> bool:
     """Проверка подключения к S3"""
     print("Проверка подключения к S3...")
     try:
@@ -34,7 +39,7 @@ def validate_s3_connection():
         return False
 
 
-def main():
+def main() -> None:
     print("=== Фаза 1: Построение базы данных изображений Москвы ===")
     print("Версия: PyTorch + S3Manager")
     start_time = time.time()
@@ -64,7 +69,8 @@ def main():
 
     # Сохраняем сырые признаки (опционально, для отладки)
     print("Сохранение сырых признаков...")
-    with open("data/processed/raw_features.pkl", "wb") as f:
+    raw_features_path = PROJECT_ROOT / "data" / "processed" / "raw_features.pkl"
+    with open(raw_features_path, "wb") as f:
         pickle.dump(features_dict, f)
 
     # 2. Создание FAISS индекса
@@ -115,10 +121,11 @@ def main():
 
     # Сохраняем список неудачных изображений
     if failed_images:
-        with open("data/processed/failed_images.txt", "w") as f:
+        failed_images_path = PROJECT_ROOT / "data" / "processed" / "failed_images.txt"
+        with open(failed_images_path, "w") as f:
             for img in failed_images:
                 f.write(f"{img}\n")
-        print(f"Список неудачных изображений сохранен: data/processed/failed_images.txt")
+        print(f"Список неудачных изображений сохранен: {failed_images_path}")
 
 
 if __name__ == "__main__":

@@ -1,77 +1,14 @@
 import json
 import os
 import pickle
+from typing import Any, Dict, List, Union
 
 import faiss
 
-from pathlib import Path
-import sys
-
-current_file = Path(__file__).resolve()
-project_root_in_cloud = Path("/job")  # Явно указываем корень в облаке
-local_project_root = current_file.parent.parent
-
-# Выбираем корень в зависимости от окружения
-# Проверяем, находимся ли мы в среде DataSphere (существует ли папка /job)
-if project_root_in_cloud.exists():
-    ROOT_DIR = project_root_in_cloud
-    print("✓ Обнаружена среда DataSphere. Используем путь /job")
-else:
-    ROOT_DIR = local_project_root
-    print("✓ Обнаружена локальная среда. Используем локальный путь")
-
-# Добавляем возможные пути к модулям в sys.path
-possible_paths_to_models = [
-    ROOT_DIR / "models",  # Папка models в корне
-    ROOT_DIR / "src" / "models",  # Папка models внутри src
-    ROOT_DIR,  # Сам корень проекта
-    ROOT_DIR / "src",  # Папка src
-    ROOT_DIR / "utils",  # Папка utils в корне
-    ROOT_DIR / "src" / "utils",  # Папка utils внутри src
-]
-
-for path in possible_paths_to_models:
-    path_str = str(path)
-    if path.exists() and path_str not in sys.path:
-        sys.path.insert(0, path_str)
-        print(f"✓ Добавлен путь: {path}")
-
-# Также добавляем родительскую директорию текущего файла
-current_parent = str(current_file.parent)
-if current_parent not in sys.path:
-    sys.path.insert(0, current_parent)
-
-print("=" * 60)
-print("FINAL ENVIRONMENT INFO:")
-print(f"Current file: {current_file}")
-print(f"ROOT_DIR: {ROOT_DIR}")
-print(f"Current working directory: {Path.cwd()}")
-print(f"Python will look for modules in:")
-for i, path in enumerate(sys.path[:10]):  # Показываем первые 10 путей
-    print(f"  {i+1}. {path}")
-print("=" * 60)
-
-# Диагностика: что действительно есть в облаке
-print("\nCHECKING CLOUD ENVIRONMENT STRUCTURE:")
-check_paths = [ROOT_DIR, Path(".")]
-for path in check_paths:
-    if path.exists():
-        print(f"\nСодержимое {path}:")
-        try:
-            items = list(path.iterdir())
-            if not items:
-                print("  [EMPTY]")
-            for item in items:
-                item_type = "DIR" if item.is_dir() else "FILE"
-                print(f"  [{item_type}] {item.name}")
-        except Exception as e:
-            print(f"  Ошибка доступа: {e}")
-print("=" * 60)
-
-from utils.config import DATA_PATHS, s3_manager
+from src.utils.config import DATA_PATHS, s3_manager
 
 
-def monitor_database():
+def monitor_database() -> None:
     """Мониторинг состояния базы данных"""
     print("=== МОНИТОРИНГ БАЗЫ ДАННЫХ ===")
 
@@ -89,7 +26,7 @@ def monitor_database():
     if os.path.exists(DATA_PATHS["mapping_file"]):
         try:
             with open(DATA_PATHS["mapping_file"], "rb") as f:
-                mapping = pickle.load(f)
+                mapping: Dict[Any, Any] = pickle.load(f)
             print(f"✓ Маппинг: {len(mapping)} записей")
         except Exception as e:
             print(f"✗ Ошибка загрузки маппинга: {e}")
@@ -100,7 +37,7 @@ def monitor_database():
     if os.path.exists(DATA_PATHS["metadata_file"]):
         try:
             with open(DATA_PATHS["metadata_file"], "r") as f:
-                metadata = json.load(f)
+                metadata: Dict[str, Union[str, int, float, bool, List[Any], Dict[Any, Any]]] = json.load(f)
             print("✓ Метаданные сборки:")
             for key, value in metadata.items():
                 if key != "processing_stats":

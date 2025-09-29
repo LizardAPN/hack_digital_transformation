@@ -1,11 +1,20 @@
+from pathlib import Path
+from typing import List, Optional
 import os
 import zipfile
-from pathlib import Path
 
 
-def extract_zip_advanced(zip_path, extract_to, remove_after_extract=False):
+def extract_zip_advanced(zip_path: str, extract_to: str, remove_after_extract: bool = False) -> Optional[List[str]]:
     """
     Разархивирует ZIP файл с обработкой ошибок и опцией удаления архива
+    
+    Args:
+        zip_path: Путь к ZIP файлу
+        extract_to: Путь к директории для извлечения
+        remove_after_extract: Флаг удаления архива после извлечения
+        
+    Returns:
+        Список извлеченных файлов или None в случае ошибки
     """
     try:
         # Проверяем существование архива
@@ -21,7 +30,7 @@ def extract_zip_advanced(zip_path, extract_to, remove_after_extract=False):
 
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             # Получаем информацию о файлах в архиве
-            file_list = zip_ref.namelist()
+            file_list: List[str] = zip_ref.namelist()
             print(f"Файлы в архиве: {file_list}")
 
             # Извлекаем все файлы

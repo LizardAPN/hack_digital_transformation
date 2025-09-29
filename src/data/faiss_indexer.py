@@ -1,86 +1,41 @@
+from typing import Dict, List, Any, Optional, Tuple, Union
 import os
 import pickle
 
 import faiss
 import numpy as np
 from tqdm import tqdm
-from pathlib import Path
-import sys
 
-current_file = Path(__file__).resolve()
-project_root_in_cloud = Path("/job")  # Явно указываем корень в облаке
-local_project_root = current_file.parent.parent
-
-# Выбираем корень в зависимости от окружения
-# Проверяем, находимся ли мы в среде DataSphere (существует ли папка /job)
-if project_root_in_cloud.exists():
-    ROOT_DIR = project_root_in_cloud
-    print("✓ Обнаружена среда DataSphere. Используем путь /job")
-else:
-    ROOT_DIR = local_project_root
-    print("✓ Обнаружена локальная среда. Используем локальный путь")
-
-# Добавляем возможные пути к модулям в sys.path
-possible_paths_to_models = [
-    ROOT_DIR / "models",  # Папка models в корне
-    ROOT_DIR / "src" / "models",  # Папка models внутри src
-    ROOT_DIR,  # Сам корень проекта
-    ROOT_DIR / "src",  # Папка src
-    ROOT_DIR / "utils",  # Папка utils в корне
-    ROOT_DIR / "src" / "utils",  # Папка utils внутри src
-]
-
-for path in possible_paths_to_models:
-    path_str = str(path)
-    if path.exists() and path_str not in sys.path:
-        sys.path.insert(0, path_str)
-        print(f"✓ Добавлен путь: {path}")
-
-# Также добавляем родительскую директорию текущего файла
-current_parent = str(current_file.parent)
-if current_parent not in sys.path:
-    sys.path.insert(0, current_parent)
-
-print("=" * 60)
-print("FINAL ENVIRONMENT INFO:")
-print(f"Current file: {current_file}")
-print(f"ROOT_DIR: {ROOT_DIR}")
-print(f"Current working directory: {Path.cwd()}")
-print(f"Python will look for modules in:")
-for i, path in enumerate(sys.path[:10]):  # Показываем первые 10 путей
-    print(f"  {i+1}. {path}")
-print("=" * 60)
-
-# Диагностика: что действительно есть в облаке
-print("\nCHECKING CLOUD ENVIRONMENT STRUCTURE:")
-check_paths = [ROOT_DIR, Path(".")]
-for path in check_paths:
-    if path.exists():
-        print(f"\nСодержимое {path}:")
-        try:
-            items = list(path.iterdir())
-            if not items:
-                print("  [EMPTY]")
-            for item in items:
-                item_type = "DIR" if item.is_dir() else "FILE"
-                print(f"  [{item_type}] {item.name}")
-        except Exception as e:
-            print(f"  Ошибка доступа: {e}")
-print("=" * 60)
-
-from utils.config import FAISS_CONFIG
+from src.utils.config import FAISS_CONFIG
 
 
 class FaissIndexer:
-    def __init__(self, dimension=2048):
-        self.dimension = dimension
-        self.index = None
-        self.image_mapping = {}
+    """Класс для работы с FAISS индексом для поиска похожих изображений"""
 
-    def create_index(self, features_dict, index_type="IVF"):
-        """Создание FAISS индекса из признаков"""
-        s3_keys = []
-        features_list = []
+    def __init__(self, dimension: int = 2048) -> None:
+        """
+        Инициализация FAISS индекса
+        
+        Args:
+            dimension: Размерность вектора признаков
+        """
+        self.dimension: int = dimension
+        self.index: Optional[faiss.Index] = None
+        self.image_mapping: Dict[int, Dict[str, Any]] = {}
+
+    def create_index(self, features_dict: Dict[str, Dict[str, Any]], index_type: str = "IVF") -> int:
+        """
+        Создание FAISS индекса из признаков
+        
+        Args:
+            features_dict: Словарь признаков {s3_key: {"features": np.ndarray, ...}}
+            index_type: Тип индекса ("Flat" или "IVF")
+            
+        Returns:
+            Количество проиндексированных изображений
+        """
+        s3_keys: List[str] = []
+        features_list: List[np.ndarray] = []
 
         print("Подготовка данных для FAISS...")
         for i, (s3_key, data) in enumerate(tqdm(features_dict.items())):
@@ -107,8 +62,17 @@ class FaissIndexer:
 
         return len(features_matrix)
 
-    def search_similar(self, query_features, k=10):
-        """Поиск k наиболее похожих изображений"""
+    def search_similar(self, query_features: np.ndarray, k: int = 10) -> List[Dict[str, Union[int, str, float]]]:
+        """
+        Поиск k наиболее похожих изображений
+        
+        Args:
+            query_features: Вектор признаков для поиска
+            k: Количество похожих изображений для возврата
+            
+        Returns:
+            Список результатов поиска
+        """
         if self.index is None:
             raise ValueError("Индекс не инициализирован")
 
@@ -116,7 +80,7 @@ class FaissIndexer:
 
         distances, indices = self.index.search(query_features, k)
 
-        results = []
+        results: List[Dict[str, Union[int, str, float]]] = []
         for i, (distance, idx) in enumerate(zip(distances[0], indices[0])):
             if idx in self.image_mapping:
                 results.append(
@@ -131,12 +95,19 @@ class FaissIndexer:
 
         return results
 
-    def save_index(self, index_path, mapping_path):
-        """Сохранение индекса и маппинга"""
+    def save_index(self, index_path: str, mapping_path: str) -> None:
+        """
+        Сохранение индекса и маппинга
+        
+        Args:
+            index_path: Путь для сохранения индекса
+            mapping_path: Путь для сохранения маппинга
+        """
         os.makedirs(os.path.dirname(index_path), exist_ok=True)
         os.makedirs(os.path.dirname(mapping_path), exist_ok=True)
 
-        faiss.write_index(self.index, index_path)
+        if self.index is not None:
+            faiss.write_index(self.index, index_path)
 
         with open(mapping_path, "wb") as f:
             pickle.dump(self.image_mapping, f)
@@ -144,12 +115,19 @@ class FaissIndexer:
         print(f"Индекс сохранен: {index_path}")
         print(f"Маппинг сохранен: {mapping_path}")
 
-    def load_index(self, index_path, mapping_path):
-        """Загрузка индекса и маппинга"""
+    def load_index(self, index_path: str, mapping_path: str) -> None:
+        """
+        Загрузка индекса и маппинга
+        
+        Args:
+            index_path: Путь к сохраненному индексу
+            mapping_path: Путь к сохраненному маппингу
+        """
         self.index = faiss.read_index(index_path)
 
         with open(mapping_path, "rb") as f:
             self.image_mapping = pickle.load(f)
 
         print(f"Индекс загружен: {index_path}")
-        print(f"Размер индекса: {self.index.ntotal}")
+        if self.index is not None:
+            print(f"Размер индекса: {self.index.ntotal}")

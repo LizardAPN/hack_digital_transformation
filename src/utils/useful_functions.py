@@ -1,19 +1,23 @@
-import collections
-import itertools
-import os
+from pathlib import Path
+from typing import Tuple, Optional, List, Any
 import re
 import shutil
-import zipfile
 from itertools import zip_longest
-from math import atan2, cos, radians, sin, sqrt
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from scipy.spatial import KDTree
 
 
-def move_and_remove_files(source_dir, destination_dir, remove_after_move=False):
+def move_and_remove_files(source_dir: Path, destination_dir: Path, remove_after_move: bool = False) -> None:
+    """
+    Перемещает файлы из source_dir в destination_dir и удаляет source_dir если remove_after_move=True
+    
+    Args:
+        source_dir: Путь к исходной директории
+        destination_dir: Путь к целевой директории
+        remove_after_move: Флаг удаления исходной директории после перемещения
+    """
     if source_dir.exists() and source_dir.is_dir():
         for item in source_dir.iterdir():
             try:
@@ -32,8 +36,16 @@ def move_and_remove_files(source_dir, destination_dir, remove_after_move=False):
                 shutil.rmtree(source_dir)
 
 
-def extract_coordinates(coord_string):
-    """Извлекает координаты из строки"""
+def extract_coordinates(coord_string: str) -> Tuple[Optional[float], Optional[float]]:
+    """
+    Извлекает координаты из строки
+    
+    Args:
+        coord_string: Строка с координатами в формате "coordinates=[lat, lon]"
+        
+    Returns:
+        Кортеж с широтой и долготой или (None, None) если не найдены
+    """
     pattern = r"coordinates=\[([\d.-]+),\s*([\d.-]+)\]"
     match = re.search(pattern, str(coord_string))
     if match:
@@ -42,14 +54,29 @@ def extract_coordinates(coord_string):
 
 
 def merge_tables_with_tolerance(
-    target,
-    real_data,
-    target_lat_name="latitude",
-    target_lot_name="longitude",
-    real_data_lat_name="latitude",
-    real_data_lot_name="longitude",
-    max_distance_meters=100,
-):
+    target: pd.DataFrame,
+    real_data: pd.DataFrame,
+    target_lat_name: str = "latitude",
+    target_lot_name: str = "longitude",
+    real_data_lat_name: str = "latitude",
+    real_data_lot_name: str = "longitude",
+    max_distance_meters: float = 100,
+) -> pd.DataFrame:
+    """
+    Объединяет две таблицы по координатам с допустимым отклонением
+    
+    Args:
+        target: Целевая таблица с координатами
+        real_data: Таблица с реальными данными
+        target_lat_name: Название колонки широты в target
+        target_lot_name: Название колонки долготы в target
+        real_data_lat_name: Название колонки широты в real_data
+        real_data_lot_name: Название колонки долготы в real_data
+        max_distance_meters: Максимальное расстояние в метрах для объединения
+        
+    Returns:
+        Объединенный DataFrame с результатами
+    """
     # Проверка существования колонок
     if target_lat_name not in target.columns:
         raise ValueError(f"Колонка {target_lat_name} не найдена в target")
@@ -94,12 +121,22 @@ def merge_tables_with_tolerance(
     return result.reset_index(drop=True)
 
 
-def levenshtein_distance(string1, string2):
+def levenshtein_distance(string1: str, string2: str) -> int:
     """
-    >>> levenshtein_distance('AATZ', 'AAAZ')
-    1
-    >>> levenshtein_distance('AATZZZ', 'AAAZ')
-    3
+    Вычисляет расстояние Левенштейна между двумя строками
+    
+    Args:
+        string1: Первая строка
+        string2: Вторая строка
+        
+    Returns:
+        Расстояние Левенштейна между строками
+        
+    Examples:
+        >>> levenshtein_distance('AATZ', 'AAAZ')
+        1
+        >>> levenshtein_distance('AATZZZ', 'AAAZ')
+        3
     """
     distance = 0
     if len(string1) < len(string2):

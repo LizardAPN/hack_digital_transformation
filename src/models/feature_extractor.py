@@ -1,5 +1,5 @@
+from typing import Dict, List, Tuple, Optional, Any
 import io
-import pickle
 import time
 
 import numpy as np
@@ -10,75 +10,19 @@ from torchvision import models, transforms
 from torchvision.models import ResNet50_Weights
 from tqdm import tqdm
 
-from pathlib import Path
-import sys
-
-current_file = Path(__file__).resolve()
-project_root_in_cloud = Path("/job")  # Явно указываем корень в облаке
-local_project_root = current_file.parent.parent
-
-# Выбираем корень в зависимости от окружения
-# Проверяем, находимся ли мы в среде DataSphere (существует ли папка /job)
-if project_root_in_cloud.exists():
-    ROOT_DIR = project_root_in_cloud
-    print("✓ Обнаружена среда DataSphere. Используем путь /job")
-else:
-    ROOT_DIR = local_project_root
-    print("✓ Обнаружена локальная среда. Используем локальный путь")
-
-# Добавляем возможные пути к модулям в sys.path
-possible_paths_to_models = [
-    ROOT_DIR / "models",  # Папка models в корне
-    ROOT_DIR / "src" / "models",  # Папка models внутри src
-    ROOT_DIR,  # Сам корень проекта
-    ROOT_DIR / "src",  # Папка src
-    ROOT_DIR / "utils",  # Папка utils в корне
-    ROOT_DIR / "src" / "utils",  # Папка utils внутри src
-]
-
-for path in possible_paths_to_models:
-    path_str = str(path)
-    if path.exists() and path_str not in sys.path:
-        sys.path.insert(0, path_str)
-        print(f"✓ Добавлен путь: {path}")
-
-# Также добавляем родительскую директорию текущего файла
-current_parent = str(current_file.parent)
-if current_parent not in sys.path:
-    sys.path.insert(0, current_parent)
-
-print("=" * 60)
-print("FINAL ENVIRONMENT INFO:")
-print(f"Current file: {current_file}")
-print(f"ROOT_DIR: {ROOT_DIR}")
-print(f"Current working directory: {Path.cwd()}")
-print(f"Python will look for modules in:")
-for i, path in enumerate(sys.path[:10]):  # Показываем первые 10 путей
-    print(f"  {i+1}. {path}")
-print("=" * 60)
-
-# Диагностика: что действительно есть в облаке
-print("\nCHECKING CLOUD ENVIRONMENT STRUCTURE:")
-check_paths = [ROOT_DIR, Path(".")]
-for path in check_paths:
-    if path.exists():
-        print(f"\nСодержимое {path}:")
-        try:
-            items = list(path.iterdir())
-            if not items:
-                print("  [EMPTY]")
-            for item in items:
-                item_type = "DIR" if item.is_dir() else "FILE"
-                print(f"  [{item_type}] {item.name}")
-        except Exception as e:
-            print(f"  Ошибка доступа: {e}")
-print("=" * 60)
-
-from utils.config import MODEL_CONFIG, s3_manager
+from src.utils.config import MODEL_CONFIG, s3_manager
 
 
 class FeatureExtractor:
-    def __init__(self, device=None):
+    """Класс для извлечения признаков из изображений с помощью ResNet50"""
+
+    def __init__(self, device: Optional[str] = None) -> None:
+        """
+        Инициализация экстрактора признаков
+        
+        Args:
+            device: Устройство для вычислений (cuda/cpu)
+        """
         # Определяем устройство
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Используется устройство: {self.device}")
@@ -99,10 +43,18 @@ class FeatureExtractor:
         )
 
         # Статистика обработки
-        self.stats = {"processed": 0, "failed": 0, "total_time": 0}
+        self.stats: Dict[str, int] = {"processed": 0, "failed": 0, "total_time": 0}
 
-    def load_image_from_bytes(self, image_data: bytes) -> Image.Image:
-        """Загрузка изображения из байтов"""
+    def load_image_from_bytes(self, image_data: bytes) -> Optional[Image.Image]:
+        """
+        Загрузка изображения из байтов
+        
+        Args:
+            image_data: Байтовые данные изображения
+            
+        Returns:
+            Изображение PIL или None в случае ошибки
+        """
         try:
             image = Image.open(io.BytesIO(image_data))
             if image.mode != "RGB":
@@ -112,8 +64,16 @@ class FeatureExtractor:
             print(f"Ошибка загрузки изображения из байтов: {e}")
             return None
 
-    def extract_features(self, image: Image.Image) -> np.ndarray:
-        """Извлечение признаков из изображения"""
+    def extract_features(self, image: Image.Image) -> Optional[np.ndarray]:
+        """
+        Извлечение признаков из изображения
+        
+        Args:
+            image: Изображение PIL
+            
+        Returns:
+            Массив признаков или None в случае ошибки
+        """
         try:
             # Применяем трансформации
             image_tensor = self.transform(image).unsqueeze(0).to(self.device)
@@ -132,10 +92,18 @@ class FeatureExtractor:
             print(f"Ошибка извлечения признаков: {e}")
             return None
 
-    def process_image_batch(self, image_batch: dict) -> dict:
-        """Обработка батча изображений {s3_key: image_data}"""
+    def process_image_batch(self, image_batch: Dict[str, bytes]) -> Dict[str, Dict[str, Any]]:
+        """
+        Обработка батча изображений {s3_key: image_data}
+        
+        Args:
+            image_batch: Словарь с данными изображений
+            
+        Returns:
+            Словарь с результатами обработки
+        """
         start_time = time.time()
-        batch_results = {}
+        batch_results: Dict[str, Dict[str, Any]] = {}
 
         for s3_key, image_data in image_batch.items():
             # Загружаем изображение из байтов
@@ -157,15 +125,31 @@ class FeatureExtractor:
 
         return batch_results
 
-    def get_all_s3_images(self, prefix: str = "") -> list:
-        """Получение списка всех изображений в S3 bucket"""
+    def get_all_s3_images(self, prefix: str = "") -> List[str]:
+        """
+        Получение списка всех изображений в S3 bucket
+        
+        Args:
+            prefix: Префикс для фильтрации файлов
+            
+        Returns:
+            Список ключей изображений
+        """
         print("Получение списка изображений из S3...")
         image_keys = s3_manager.list_files(prefix=prefix, file_extensions=[".jpg", ".jpeg", ".png", ".webp"])
         print(f"Найдено {len(image_keys)} изображений")
         return image_keys
 
-    def process_all_images(self, batch_size: int = 32) -> dict:
-        """Пакетная обработка всех изображений из S3"""
+    def process_all_images(self, batch_size: int = 32) -> Tuple[Dict[str, Dict[str, Any]], List[str]]:
+        """
+        Пакетная обработка всех изображений из S3
+        
+        Args:
+            batch_size: Размер батча для обработки
+            
+        Returns:
+            Кортеж из словаря признаков и списка неудачных изображений
+        """
         print("Начало обработки всех изображений...")
 
         # Получаем список всех изображений
@@ -176,8 +160,8 @@ class FeatureExtractor:
             print("Не найдено изображений для обработки")
             return {}, []
 
-        features_dict = {}
-        failed_images = []
+        features_dict: Dict[str, Dict[str, Any]] = {}
+        failed_images: List[str] = []
 
         # Обработка батчами
         for i in tqdm(range(0, total_images, batch_size)):
@@ -218,6 +202,11 @@ class FeatureExtractor:
 
         return features_dict, failed_images
 
-    def get_processing_stats(self) -> dict:
-        """Получение статистики обработки"""
+    def get_processing_stats(self) -> Dict[str, int]:
+        """
+        Получение статистики обработки
+        
+        Returns:
+            Словарь со статистикой обработки
+        """
         return self.stats.copy()
