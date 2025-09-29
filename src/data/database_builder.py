@@ -1,9 +1,10 @@
 import json
 import os
 import pickle
+import sys
 import time
 from pathlib import Path
-import sys 
+
 import torch
 
 current_file = Path(__file__).resolve()
