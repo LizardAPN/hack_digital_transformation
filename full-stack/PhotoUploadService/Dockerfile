@@ -2,21 +2,21 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies for psycopg2
+# Установка системных зависимостей для psycopg2
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Установка зависимостей Python
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Копирование кода приложения
 COPY . .
 
-# Expose port
+# Открытие порта
 EXPOSE 8002
 
-# Run FastAPI with uvicorn
+# Запуск FastAPI с помощью uvicorn
 CMD ["uvicorn", "photo_upload:app", "--host", "0.0.0.0", "--port", "8002"]
