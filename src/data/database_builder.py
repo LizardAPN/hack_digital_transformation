@@ -7,18 +7,59 @@ import torch
 
 from data.faiss_indexer import FaissIndexer
 from models.feature_extractor import FeatureExtractor
-from utils.config import DATA_PATHS, s3_manager
+from utils.config import DATA_PATHS, sref3_manager
 
 
 def create_directories():
-    """Создание необходимых директорий"""
+    """
+    Создание необходимых директорий для хранения обработанных данных и индексов.
+
+    Функция создает две директории:
+    - data/processed: для хранения промежуточных данных и метаданных
+    - data/index: для хранения FAISS индексов
+
+    Параметры
+    ----------
+    Отсутствуют
+
+    Возвращает
+    -------
+    None
+
+    Примеры
+    --------
+    >>> create_directories()
+    Директории созданы
+    """
     os.makedirs("data/processed", exist_ok=True)
     os.makedirs("data/index", exist_ok=True)
     print("Директории созданы")
 
 
 def validate_s3_connection():
-    """Проверка подключения к S3"""
+    """
+    Проверка подключения к S3.
+
+    Функция проверяет возможность подключения к облачному хранилищу S3,
+    используя экземпляр s3_manager. Выполняет тестовую операцию для
+    подтверждения работоспособности соединения.
+
+    Параметры
+    ----------
+    Отсутствуют
+
+    Возвращает
+    -------
+    bool
+        True, если подключение успешно установлено, иначе False.
+
+    Примеры
+    --------
+    >>> if validate_s3_connection():
+    ...     print("Подключение к S3 установлено")
+    ... else:
+    ...     print("Ошибка подключения к S3")
+    """
     print("Проверка подключения к S3...")
     try:
         # Пробуем получить список файлов (ограничиваемся 1 для проверки)

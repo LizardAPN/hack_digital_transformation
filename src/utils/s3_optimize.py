@@ -1087,7 +1087,13 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
             self._upload_stats = {"successful": 0, "failed": 0, "total_size": 0}
 
     def reset_download_stats(self):
-        """Сброс статистики скачивания"""
+        """
+        Сброс статистики скачивания.
+
+        Сбрасывает статистику операций скачивания файлов из S3, обнуляя счетчики
+        успешных и неудачных операций, а также общий объем скачанных данных.
+        Метод потокобезопасен и использует блокировку для защиты данных.
+        """
         with self._download_lock:
             self._download_stats = {"successful": 0, "failed": 0, "total_size": 0}
 
