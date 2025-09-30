@@ -9,6 +9,7 @@ if str(utils_path) not in sys.path:
 # Настраиваем пути проекта
 try:
     from path_resolver import setup_project_paths
+
     setup_project_paths()
 except ImportError:
     # Если path_resolver недоступен, добавляем необходимые пути вручную
@@ -40,7 +41,7 @@ class FeatureExtractor:
     def __init__(self, device: Optional[str] = None) -> None:
         """
         Инициализация экстрактора признаков
-        
+
         Args:
             device: Устройство для вычислений (cuda/cpu)
         """
@@ -69,10 +70,10 @@ class FeatureExtractor:
     def load_image_from_bytes(self, image_data: bytes) -> Optional[Image.Image]:
         """
         Загрузка изображения из байтов
-        
+
         Args:
             image_data: Байтовые данные изображения
-            
+
         Returns:
             Изображение PIL или None в случае ошибки
         """
@@ -88,10 +89,10 @@ class FeatureExtractor:
     def extract_features(self, image: Image.Image) -> Optional[np.ndarray]:
         """
         Извлечение признаков из изображения
-        
+
         Args:
             image: Изображение PIL
-            
+
         Returns:
             Массив признаков или None в случае ошибки
         """
@@ -116,10 +117,10 @@ class FeatureExtractor:
     def process_image_batch(self, image_batch: Dict[str, bytes]) -> Dict[str, Dict[str, Any]]:
         """
         Обработка батча изображений {s3_key: image_data}
-        
+
         Args:
             image_batch: Словарь с данными изображений
-            
+
         Returns:
             Словарь с результатами обработки
         """
@@ -149,10 +150,10 @@ class FeatureExtractor:
     def get_all_s3_images(self, prefix: str = "") -> List[str]:
         """
         Получение списка всех изображений в S3 bucket
-        
+
         Args:
             prefix: Префикс для фильтрации файлов
-            
+
         Returns:
             Список ключей изображений
         """
@@ -164,10 +165,10 @@ class FeatureExtractor:
     def process_all_images(self, batch_size: int = 32) -> Tuple[Dict[str, Dict[str, Any]], List[str]]:
         """
         Пакетная обработка всех изображений из S3
-        
+
         Args:
             batch_size: Размер батча для обработки
-            
+
         Returns:
             Кортеж из словаря признаков и списка неудачных изображений
         """
@@ -226,7 +227,7 @@ class FeatureExtractor:
     def get_processing_stats(self) -> Dict[str, int]:
         """
         Получение статистики обработки
-        
+
         Returns:
             Словарь со статистикой обработки
         """

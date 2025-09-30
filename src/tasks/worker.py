@@ -9,6 +9,7 @@ if str(utils_path) not in sys.path:
 # Настраиваем пути проекта
 try:
     from path_resolver import setup_project_paths
+
     setup_project_paths()
 except ImportError:
     # Если path_resolver недоступен, добавляем необходимые пути вручную

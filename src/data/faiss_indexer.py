@@ -9,6 +9,7 @@ if str(utils_path) not in sys.path:
 # Настраиваем пути проекта
 try:
     from path_resolver import setup_project_paths
+
     setup_project_paths()
 except ImportError:
     # Если path_resolver недоступен, добавляем необходимые пути вручную
@@ -35,7 +36,7 @@ class FaissIndexer:
     def __init__(self, dimension: int = 2048) -> None:
         """
         Инициализация FAISS индекса
-        
+
         Args:
             dimension: Размерность вектора признаков
         """
@@ -46,11 +47,11 @@ class FaissIndexer:
     def create_index(self, features_dict: Dict[str, Dict[str, Any]], index_type: str = "IVF") -> int:
         """
         Создание FAISS индекса из признаков
-        
+
         Args:
             features_dict: Словарь признаков {s3_key: {"features": np.ndarray, ...}}
             index_type: Тип индекса ("Flat" или "IVF")
-            
+
         Returns:
             Количество проиндексированных изображений
         """
@@ -85,11 +86,11 @@ class FaissIndexer:
     def search_similar(self, query_features: np.ndarray, k: int = 10) -> List[Dict[str, Union[int, str, float]]]:
         """
         Поиск k наиболее похожих изображений
-        
+
         Args:
             query_features: Вектор признаков для поиска
             k: Количество похожих изображений для возврата
-            
+
         Returns:
             Список результатов поиска
         """
@@ -118,7 +119,7 @@ class FaissIndexer:
     def save_index(self, index_path: str, mapping_path: str) -> None:
         """
         Сохранение индекса и маппинга
-        
+
         Args:
             index_path: Путь для сохранения индекса
             mapping_path: Путь для сохранения маппинга
@@ -138,7 +139,7 @@ class FaissIndexer:
     def load_index(self, index_path: str, mapping_path: str) -> None:
         """
         Загрузка индекса и маппинга
-        
+
         Args:
             index_path: Путь к сохраненному индексу
             mapping_path: Путь к сохраненному маппингу

@@ -89,13 +89,13 @@ class TestFunctional(unittest.TestCase):
         # Проверяем, что геокодер инициализирован корректно
         self.assertIsNotNone(geocoder)
 
-    @patch('src.models.cv_model.FaissIndexer')
+    @patch("src.models.cv_model.FaissIndexer")
     def test_cv_model_initialization(self, mock_faiss_indexer):
         """Тест инициализации CV модели"""
         # Мок успешной инициализации FAISS индекса
         mock_indexer_instance = Mock()
         mock_faiss_indexer.return_value = mock_indexer_instance
-        
+
         cv_model = CVModel()
 
         # Проверяем, что модель инициализирована корректно
@@ -119,29 +119,35 @@ class TestFunctional(unittest.TestCase):
         # Проверяем, что конфигурационные файлы загружаются корректно
         try:
             from src.utils.config import MODEL_CONFIG, FAISS_CONFIG, DATA_PATHS, PERFORMANCE_CONFIG
-            
+
             # Проверяем наличие обязательных ключей
             self.assertIn("model_name", MODEL_CONFIG)
             self.assertIn("input_size", MODEL_CONFIG)
             self.assertIn("pooling", MODEL_CONFIG)
-            
+
             self.assertIn("index_type", FAISS_CONFIG)
             self.assertIn("nlist", FAISS_CONFIG)
             self.assertIn("metric", FAISS_CONFIG)
-            
+
             self.assertIn("faiss_index", DATA_PATHS)
             self.assertIn("mapping_file", DATA_PATHS)
             self.assertIn("metadata_file", DATA_PATHS)
-            
-            required_perf_keys = ["max_concurrent_tasks", "batch_size", "max_image_size", 
-                                "cache_features", "enable_gpu", "processing_timeout"]
+
+            required_perf_keys = [
+                "max_concurrent_tasks",
+                "batch_size",
+                "max_image_size",
+                "cache_features",
+                "enable_gpu",
+                "processing_timeout",
+            ]
             for key in required_perf_keys:
                 self.assertIn(key, PERFORMANCE_CONFIG)
-                
+
         except Exception as e:
             self.fail(f"Ошибка загрузки конфигурации: {e}")
 
-    @patch('src.geo.geocoder.requests')
+    @patch("src.geo.geocoder.requests")
     def test_geocoder_functionality(self, mock_requests):
         """Тест функциональности геокодера"""
         # Мок ответа от Yandex Geocoder API
@@ -149,26 +155,20 @@ class TestFunctional(unittest.TestCase):
         mock_response.json.return_value = {
             "response": {
                 "GeoObjectCollection": {
-                    "featureMember": [{
-                        "GeoObject": {
-                            "metaDataProperty": {
-                                "GeocoderMetaData": {
-                                    "text": "Moscow, Russia"
-                                }
-                            }
-                        }
-                    }]
+                    "featureMember": [
+                        {"GeoObject": {"metaDataProperty": {"GeocoderMetaData": {"text": "Moscow, Russia"}}}}
+                    ]
                 }
             }
         }
         mock_requests.get.return_value = mock_response
-        
+
         geocoder = Geocoder()
         geocoder.yandex_api_key = "test_key"
-        
+
         # Тест геокодирования
         result = geocoder.geocode(55.7558, 37.6176)
-        
+
         # Проверяем результат
         self.assertEqual(result, "Moscow, Russia")
         mock_requests.get.assert_called()

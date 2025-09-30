@@ -9,6 +9,7 @@ if str(utils_path) not in sys.path:
 # Настраиваем пути проекта
 try:
     from path_resolver import setup_project_paths
+
     setup_project_paths()
 except ImportError:
     # Если path_resolver недоступен, добавляем необходимые пути вручную
@@ -36,7 +37,7 @@ def create_directories() -> None:
     """Создание необходимых директорий"""
     processed_dir = PROJECT_ROOT / "data" / "processed"
     index_dir = PROJECT_ROOT / "data" / "index"
-    
+
     processed_dir.mkdir(parents=True, exist_ok=True)
     index_dir.mkdir(parents=True, exist_ok=True)
     print("Директории созданы")

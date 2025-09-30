@@ -9,6 +9,7 @@ if str(utils_path) not in sys.path:
 # Настраиваем пути проекта
 try:
     from path_resolver import setup_project_paths
+
     setup_project_paths()
 except ImportError:
     # Если path_resolver недоступен, добавляем необходимые пути вручную
@@ -27,12 +28,12 @@ import zipfile
 def extract_zip_advanced(zip_path: str, extract_to: str, remove_after_extract: bool = False) -> Optional[List[str]]:
     """
     Разархивирует ZIP файл с обработкой ошибок и опцией удаления архива
-    
+
     Args:
         zip_path: Путь к ZIP файлу
         extract_to: Путь к директории для извлечения
         remove_after_extract: Флаг удаления архива после извлечения
-        
+
     Returns:
         Список извлеченных файлов или None в случае ошибки
     """

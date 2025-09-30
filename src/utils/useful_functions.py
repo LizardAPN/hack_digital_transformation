@@ -9,6 +9,7 @@ if str(utils_path) not in sys.path:
 # Настраиваем пути проекта
 try:
     from path_resolver import setup_project_paths
+
     setup_project_paths()
 except ImportError:
     # Если path_resolver недоступен, добавляем необходимые пути вручную
@@ -32,7 +33,7 @@ from scipy.spatial import KDTree
 def move_and_remove_files(source_dir: Path, destination_dir: Path, remove_after_move: bool = False) -> None:
     """
     Перемещает файлы из source_dir в destination_dir и удаляет source_dir если remove_after_move=True
-    
+
     Args:
         source_dir: Путь к исходной директории
         destination_dir: Путь к целевой директории
@@ -59,10 +60,10 @@ def move_and_remove_files(source_dir: Path, destination_dir: Path, remove_after_
 def extract_coordinates(coord_string: str) -> Tuple[Optional[float], Optional[float]]:
     """
     Извлекает координаты из строки
-    
+
     Args:
         coord_string: Строка с координатами в формате "coordinates=[lat, lon]"
-        
+
     Returns:
         Кортеж с широтой и долготой или (None, None) если не найдены
     """
@@ -84,7 +85,7 @@ def merge_tables_with_tolerance(
 ) -> pd.DataFrame:
     """
     Объединяет две таблицы по координатам с допустимым отклонением
-    
+
     Args:
         target: Целевая таблица с координатами
         real_data: Таблица с реальными данными
@@ -93,7 +94,7 @@ def merge_tables_with_tolerance(
         real_data_lat_name: Название колонки широты в real_data
         real_data_lot_name: Название колонки долготы в real_data
         max_distance_meters: Максимальное расстояние в метрах для объединения
-        
+
     Returns:
         Объединенный DataFrame с результатами
     """
@@ -144,14 +145,14 @@ def merge_tables_with_tolerance(
 def levenshtein_distance(string1: str, string2: str) -> int:
     """
     Вычисляет расстояние Левенштейна между двумя строками
-    
+
     Args:
         string1: Первая строка
         string2: Вторая строка
-        
+
     Returns:
         Расстояние Левенштейна между строками
-        
+
     Examples:
         >>> levenshtein_distance('AATZ', 'AAAZ')
         1

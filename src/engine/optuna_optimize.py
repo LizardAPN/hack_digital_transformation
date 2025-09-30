@@ -9,6 +9,7 @@ if str(utils_path) not in sys.path:
 # Настраиваем пути проекта
 try:
     from path_resolver import setup_project_paths
+
     setup_project_paths()
 except ImportError:
     # Если path_resolver недоступен, добавляем необходимые пути вручную
@@ -415,11 +416,11 @@ def find_file_by_pattern(directory: Path, pattern: str) -> Optional[Path]:
     """
     Ищет файл в директории по шаблону имени.
     Возвращает Path к первому найденному файлу или None.
-    
+
     Args:
         directory: Директория для поиска
         pattern: Шаблон имени файла
-        
+
     Returns:
         Path к найденному файлу или None
     """
@@ -435,11 +436,11 @@ def find_dir_by_pattern(directory: Path, pattern: str) -> Optional[Path]:
     """
     Ищет директорию по шаблону имени.
     Возвращает Path к первой найденной директории или None.
-    
+
     Args:
         directory: Директория для поиска
         pattern: Шаблон имени директории
-        
+
     Returns:
         Path к найденной директории или None
     """
