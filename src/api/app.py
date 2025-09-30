@@ -136,6 +136,30 @@ class AsyncTaskResponse(BaseModel):
     message: str = "Задача принята в обработку"
 
 
+class SearchByCoordinatesRequest(BaseModel):
+    """Модель запроса для поиска изображений по координатам"""
+
+    lat: float
+    lon: float
+    radius_km: Optional[float] = 1.0  # Радиус поиска в километрах
+
+
+class SearchByAddressRequest(BaseModel):
+    """Модель запроса для поиска изображений по адресу"""
+
+    address: str
+
+
+class SearchResult(BaseModel):
+    """Модель результата поиска изображений"""
+
+    image_path: str
+    coordinates: CoordinateResult
+    address: Optional[str] = None
+    distance_km: Optional[float] = None
+    processed_at: str
+
+
 class TaskStatusResponse(BaseModel):
     """Модель ответа для статуса задачи"""
 
@@ -343,6 +367,181 @@ async def get_latest_results(limit: int = 10):
         return {"results": [dict(result) for result in results]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка получения результатов: {str(e)}")
+
+
+@app.post("/search/by_coordinates", response_model=List[SearchResult])
+async def search_by_coordinates(request: SearchByCoordinatesRequest):
+    """Поиск изображений по координатам"""
+    try:
+        db = SessionLocal()
+        
+        # Если радиус не задан, используем значение по умолчанию
+        radius_km = request.radius_km or 1.0
+        
+        # Запрос к базе данных для поиска изображений в радиусе заданных координат
+        # Используем приближенную формулу для расчета расстояния между точками
+        query = text("""
+            SELECT id, image_path, coordinates, address, processed_at,
+                   (6371 * acos(cos(radians(:lat)) * cos(radians((coordinates->>'lat')::float)) 
+                   * cos(radians((coordinates->>'lon')::float) - radians(:lon)) 
+                   + sin(radians(:lat)) * sin(radians((coordinates->>'lat')::float)))) AS distance_km
+            FROM processing_results 
+            WHERE coordinates IS NOT NULL 
+              AND (coordinates->>'lat')::float IS NOT NULL 
+              AND (coordinates->>'lon')::float IS NOT NULL
+              AND (6371 * acos(cos(radians(:lat)) * cos(radians((coordinates->>'lat')::float)) 
+                   * cos(radians((coordinates->>'lon')::float) - radians(:lon)) 
+                   + sin(radians(:lat)) * sin(radians((coordinates->>'lat')::float)))) <= :radius_km
+            ORDER BY distance_km ASC
+            LIMIT 50
+        """)
+        
+        result = db.execute(query, {
+            "lat": request.lat, 
+            "lon": request.lon, 
+            "radius_km": radius_km
+        })
+        rows = result.fetchall()
+        db.close()
+        
+        # Преобразуем результаты в формат ответа
+        search_results = []
+        for row in rows:
+            coords = json.loads(row.coordinates) if isinstance(row.coordinates, str) else row.coordinates
+            search_results.append(SearchResult(
+                image_path=row.image_path,
+                coordinates=CoordinateResult(lat=coords.get("lat"), lon=coords.get("lon")),
+                address=row.address,
+                distance_km=float(row.distance_km) if row.distance_km is not None else None,
+                processed_at=row.processed_at.isoformat() if hasattr(row.processed_at, 'isoformat') else str(row.processed_at)
+            ))
+        
+        return search_results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка поиска по координатам: {str(e)}")
+
+
+@app.post("/search/by_address", response_model=List[SearchResult])
+async def search_by_address(request: SearchByAddressRequest):
+    """Поиск изображений по адресу"""
+    try:
+        # Сначала геокодируем адрес в координаты
+        from src.geo.geocoder import geocode_coordinates
+        import re
+        
+        # Простая попытка извлечь координаты из адреса, если они указаны в формате "lat,lon"
+        coord_match = re.match(r'^\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*$', request.address)
+        if coord_match:
+            lat, lon = float(coord_match.group(1)), float(coord_match.group(2))
+        else:
+            # Пытаемся геокодировать адрес
+            # Для простоты возьмем координаты из строки адреса, если это возможно
+            # В реальной реализации здесь должен быть полноценный геокодер
+            raise HTTPException(status_code=501, detail="Геокодирование адресов пока не реализовано")
+        
+        # Выполняем поиск по координатам с небольшим радиусом
+        db = SessionLocal()
+        query = text("""
+            SELECT id, image_path, coordinates, address, processed_at,
+                   (6371 * acos(cos(radians(:lat)) * cos(radians((coordinates->>'lat')::float)) 
+                   * cos(radians((coordinates->>'lon')::float) - radians(:lon)) 
+                   + sin(radians(:lat)) * sin(radians((coordinates->>'lat')::float)))) AS distance_km
+            FROM processing_results 
+            WHERE coordinates IS NOT NULL 
+              AND (coordinates->>'lat')::float IS NOT NULL 
+              AND (coordinates->>'lon')::float IS NOT NULL
+              AND (6371 * acos(cos(radians(:lat)) * cos(radians((coordinates->>'lat')::float)) 
+                   * cos(radians((coordinates->>'lon')::float) - radians(:lon)) 
+                   + sin(radians(:lat)) * sin(radians((coordinates->>'lat')::float)))) <= 1.0
+            ORDER BY distance_km ASC
+            LIMIT 50
+        """)
+        
+        result = db.execute(query, {"lat": lat, "lon": lon})
+        rows = result.fetchall()
+        db.close()
+        
+        # Преобразуем результаты в формат ответа
+        search_results = []
+        for row in rows:
+            coords = json.loads(row.coordinates) if isinstance(row.coordinates, str) else row.coordinates
+            search_results.append(SearchResult(
+                image_path=row.image_path,
+                coordinates=CoordinateResult(lat=coords.get("lat"), lon=coords.get("lon")),
+                address=row.address,
+                distance_km=float(row.distance_km) if row.distance_km is not None else None,
+                processed_at=row.processed_at.isoformat() if hasattr(row.processed_at, 'isoformat') else str(row.processed_at)
+            ))
+        
+        return search_results
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка поиска по адресу: {str(e)}")
+
+
+@app.get("/export/results/xlsx")
+async def export_results_xlsx():
+    """Экспорт результатов обработки в формате XLSX"""
+    try:
+        import pandas as pd
+        from io import BytesIO
+        from fastapi.responses import StreamingResponse
+        
+        # Получаем последние результаты из базы данных
+        db = SessionLocal()
+        query = text("""
+            SELECT id, image_path, task_id, request_id, coordinates, address, 
+                   ocr_result, buildings, processed_at, error
+            FROM processing_results
+            ORDER BY processed_at DESC
+            LIMIT 1000
+        """)
+        
+        result = db.execute(query)
+        rows = result.fetchall()
+        db.close()
+        
+        # Преобразуем данные в DataFrame
+        data = []
+        for row in rows:
+            # Преобразуем JSON поля в строки для экспорта
+            coords = json.loads(row.coordinates) if isinstance(row.coordinates, str) else row.coordinates
+            ocr = json.loads(row.ocr_result) if isinstance(row.ocr_result, str) else row.ocr_result
+            buildings = json.loads(row.buildings) if isinstance(row.buildings, str) else row.buildings
+            
+            data.append({
+                "ID": row.id,
+                "Путь к изображению": row.image_path,
+                "ID задачи": row.task_id,
+                "ID запроса": row.request_id,
+                "Широта": coords.get("lat") if coords else None,
+                "Долгота": coords.get("lon") if coords else None,
+                "Адрес": row.address,
+                "OCR результат": str(ocr) if ocr else None,
+                "Здания": str(buildings) if buildings else None,
+                "Дата обработки": row.processed_at.isoformat() if hasattr(row.processed_at, 'isoformat') else str(row.processed_at),
+                "Ошибка": row.error
+            })
+        
+        df = pd.DataFrame(data)
+        
+        # Создаем буфер для XLSX файла
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Результаты обработки')
+        
+        buffer.seek(0)
+        
+        # Возвращаем файл как ответ
+        headers = {
+            'Content-Disposition': 'attachment; filename="processing_results.xlsx"',
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        }
+        
+        return StreamingResponse(buffer, headers=headers)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка экспорта в XLSX: {str(e)}")
 
 
 @app.get("/model/info")
