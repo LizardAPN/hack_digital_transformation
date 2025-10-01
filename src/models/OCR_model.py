@@ -186,13 +186,22 @@ class OverlayOCR:
         return img[y0:y1, :]
 
     # ---------- главный метод ----------
-    def run_on_image(self, image_path: str) -> Tuple[str, str, str, float, str]:
+    def run_on_image(self, image) -> Tuple[str, str, str, float, str]:
         """
         Возвращает:
           final, norm, joined, conf, best_roi_name
         """
-        img = cv2.imread(image_path)
-        assert img is not None, f"Не удалось загрузить изображение: {image_path}"
+        # Преобразуем PIL Image в numpy array, если необходимо
+        if hasattr(image, 'convert'):
+            # Это PIL Image, конвертируем в RGB если нужно, затем в numpy array
+            if image.mode != "RGB":
+                image = image.convert("RGB")
+            img = np.array(image)
+            # Конвертируем из RGB в BGR (так как OpenCV использует BGR)
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        else:
+            # Предполагаем, что это уже numpy array
+            img = image
 
         rois = [
             ("left_bottom", self.roi_left_bottom(img, 1 / 3, 1 / 4)),

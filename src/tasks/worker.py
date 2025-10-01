@@ -176,10 +176,10 @@ def save_result_to_db(result: dict):
         query = text(
             """
             INSERT INTO processing_results (
-                photo_id, image_path, task_id, request_id, coordinates, address, 
+                image_path, task_id, request_id, coordinates, address, 
                 ocr_result, buildings, processed_at, error
             ) VALUES (
-                :photo_id, :image_path, :task_id, :request_id, :coordinates, :address,
+                :image_path, :task_id, :request_id, :coordinates, :address,
                 :ocr_result, :buildings, :processed_at, :error
             )
         """

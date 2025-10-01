@@ -72,6 +72,25 @@ services:
     networks:
       - app-network
 
+  worker:
+    build: ..
+    command: celery -A src.tasks.worker worker --loglevel=info
+    depends_on:
+      - redis
+      - db
+    environment:
+      - DATABASE_URL=postgresql://appuser:apppassword@db:5432/appdb
+      - REDIS_URL=redis://redis:6379/0
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL}
+      - AWS_BUCKET_NAME=${AWS_BUCKET_NAME}
+    volumes:
+      - ../data:/app/data
+      - ../logs:/app/logs
+    networks:
+      - app-network
+
   db:
     build: ./DB
     ports:
@@ -90,3 +109,4 @@ networks:
     driver: bridge
 volumes:
   pgdata:
+  redis_data:

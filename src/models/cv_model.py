@@ -22,6 +22,7 @@ except ImportError:
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional
+import io
 
 import numpy as np
 from PIL import Image
@@ -102,15 +103,20 @@ class CVModel:
                 "ocr_result": None,
             }
 
-            # Загружаем изображение
-            image = Image.open(image_path)
+            # Загружаем изображение из S3
+            image_data = s3_manager.download_bytes(image_path)
+            if image_data is None:
+                raise FileNotFoundError(f"Не удалось загрузить изображение из S3: {image_path}")
+            
+            # Открываем изображение из байтов
+            image = Image.open(io.BytesIO(image_data))
             if image.mode != "RGB":
                 image = image.convert("RGB")
 
             # Извлекаем признаки изображения
             features = self.feature_extractor.extract_features(image)
 
-            if features is not None:
+            if features is not None and self.indexer is not None:
                 # Поиск похожих изображений в базе
                 similar_images = self.indexer.search_similar(features, k=5)
 
@@ -127,7 +133,7 @@ class CVModel:
 
             # Выполняем OCR
             try:
-                final, norm, joined, conf, roi_name = self.ocr_model.run_on_image(image_path)
+                final, norm, joined, conf, roi_name = self.ocr_model.run_on_image(image)
                 result["ocr_result"] = {
                     "final": final,
                     "norm": norm,
@@ -221,7 +227,8 @@ class CVModel:
         """
         try:
             # Получаем метаданные объекта из S3
-            metadata = s3_manager.get_object_metadata(s3_key)
+            file_info = s3_manager.get_file_info(s3_key)
+            metadata = file_info.get("metadata", {}) if file_info else {}
 
             if metadata and "latitude" in metadata and "longitude" in metadata:
                 lat = float(metadata["latitude"])

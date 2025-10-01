@@ -51,8 +51,18 @@ class FeatureExtractor:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Используется устройство: {self.device}")
 
-        # Загружаем предобученную ResNet50
-        self.model = models.resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
+        # Загружаем предобученную ResNet50 с обработкой ошибок
+        try:
+            self.model = models.resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
+        except Exception as e:
+            print(f"Ошибка загрузки весов модели из интернета: {e}")
+            print("Попытка загрузить модель без предобученных весов...")
+            try:
+                self.model = models.resnet50(weights=None)
+            except Exception as e2:
+                print(f"Ошибка загрузки модели без весов: {e2}")
+                raise RuntimeError("Не удалось загрузить модель ResNet50")
+        
         self.model = nn.Sequential(*list(self.model.children())[:-1])
         self.model.eval()
         self.model.to(self.device)

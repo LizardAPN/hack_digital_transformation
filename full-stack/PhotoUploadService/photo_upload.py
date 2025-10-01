@@ -33,7 +33,7 @@ s3_client = boto3.client(
 )
 
 
-def trigger_image_processing(image_path: str, request_id: str = None, photo_id: int = None) -> bool:
+def trigger_image_processing(image_path: str, request_id: Optional[str] = None, photo_id: Optional[int] = None) -> bool:
     """
     Trigger image processing by calling the image processing API
     
@@ -55,7 +55,7 @@ def trigger_image_processing(image_path: str, request_id: str = None, photo_id: 
             payload["request_id"] = request_id
             
         if photo_id:
-            payload["photo_id"] = photo_id
+            payload["photo_id"] = str(photo_id)
             
         # Call the image processing API
         response = requests.post(
@@ -141,7 +141,7 @@ async def upload_photo(
         raise HTTPException(status_code=400, detail="No file provided")
     
     # Generate unique filename
-    file_extension = file.filename.split('.')[-1] if '.' in file.filename else ''
+    file_extension = file.filename.split('.')[-1] if file.filename and '.' in file.filename else ''
     unique_filename = f"{uuid.uuid4()}.{file_extension}"
     
     try:
@@ -150,7 +150,7 @@ async def upload_photo(
             file.file,
             S3_BUCKET_NAME,
             unique_filename,
-            ExtraArgs={'ContentType': file.content_type}
+            ExtraArgs={'ContentType': file.content_type or 'application/octet-stream'}
         )
         
         # Generate S3 URL
@@ -166,6 +166,8 @@ async def upload_photo(
         )
         
         result = cur.fetchone()
+        if result is None:
+            raise HTTPException(status_code=500, detail="Failed to insert photo into database")
         photo_id = result[0]
         created_at = result[1]
         
