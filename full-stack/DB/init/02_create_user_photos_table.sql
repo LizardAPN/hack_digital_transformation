@@ -1,3 +1,4 @@
+IF NOT EXISTS
 CREATE TABLE user_photos (
     id SERIAL PRIMARY KEY,
     owner_id INT NOT NULL,
