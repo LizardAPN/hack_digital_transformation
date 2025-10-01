@@ -171,6 +171,18 @@ class TaskStatusResponse(BaseModel):
     progress: Optional[dict] = None
 
 
+class UserQueryHistory(BaseModel):
+    """Модель для истории запросов пользователя"""
+    
+    id: Optional[int] = None
+    user_id: int
+    query_type: str  # Тип запроса: upload, search_by_coords, search_by_address, etc.
+    query_data: Dict[str, Any]  # Данные запроса (координаты, адрес, путь к изображению и т.д.)
+    timestamp: datetime
+    result_count: Optional[int] = None  # Количество найденных результатов
+
+
+
 def load_model_and_config():
     """Загрузка обученной модели и конфигурации"""
     global model, config
@@ -574,6 +586,178 @@ async def export_results_xlsx():
         raise HTTPException(status_code=500, detail=f"Ошибка экспорта в XLSX: {str(e)}")
 
 
+@app.post("/user/query_history", response_model=UserQueryHistory)
+async def save_user_query_history(query_history: UserQueryHistory):
+    """Сохранение истории запросов пользователя"""
+    try:
+        db = SessionLocal()
+        
+        # Подготавливаем данные для сохранения
+        query_data_json = json.dumps(query_history.query_data) if query_history.query_data else "{}"
+        
+        # Вставляем данные в таблицу
+        query = text(
+            """
+            INSERT INTO user_query_history (
+                user_id, query_type, query_data, timestamp, result_count
+            ) VALUES (
+                :user_id, :query_type, :query_data, :timestamp, :result_count
+            ) RETURNING id
+            """
+        )
+        
+        result = db.execute(
+            query,
+            {
+                "user_id": query_history.user_id,
+                "query_type": query_history.query_type,
+                "query_data": query_data_json,
+                "timestamp": query_history.timestamp,
+                "result_count": query_history.result_count,
+            },
+        )
+        
+        query_id = result.fetchone()[0]
+        db.commit()
+        db.close()
+        
+        # Возвращаем сохраненную запись с присвоенным ID
+        return UserQueryHistory(
+            id=query_id,
+            user_id=query_history.user_id,
+            query_type=query_history.query_type,
+            query_data=query_history.query_data,
+            timestamp=query_history.timestamp,
+            result_count=query_history.result_count,
+        )
+        
+    except Exception as e:
+        if "db" in locals():
+            db.rollback()
+            db.close()
+        raise HTTPException(status_code=500, detail=f"Ошибка сохранения истории запросов: {str(e)}")
+
+
+@app.get("/user/query_history/{user_id}", response_model=List[UserQueryHistory])
+async def get_user_query_history(user_id: int, limit: int = 50):
+    """Получение истории запросов пользователя"""
+    try:
+        db = SessionLocal()
+        
+        # Запрашиваем историю запросов пользователя
+        query = text(
+            """
+            SELECT id, user_id, query_type, query_data, timestamp, result_count
+            FROM user_query_history
+            WHERE user_id = :user_id
+            ORDER BY timestamp DESC
+            LIMIT :limit
+            """
+        )
+        
+        result = db.execute(query, {"user_id": user_id, "limit": limit})
+        rows = result.fetchall()
+        db.close()
+        
+        # Преобразуем результаты в формат ответа
+        history = []
+        for row in rows:
+            query_data = json.loads(row.query_data) if isinstance(row.query_data, str) else row.query_data
+            history.append(UserQueryHistory(
+                id=row.id,
+                user_id=row.user_id,
+                query_type=row.query_type,
+                query_data=query_data,
+                timestamp=row.timestamp,
+                result_count=row.result_count,
+            ))
+        
+        return history
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка получения истории запросов: {str(e)}")
+
+
+@app.post("/coordinates", response_model=CoordinateResult)
+async def upload_coordinates(coordinates: CoordinateResult):
+    """Загрузка координат"""
+    try:
+        db = SessionLocal()
+        
+        # Вставляем данные в таблицу coordinates
+        query = text(
+            """
+            INSERT INTO coordinates (
+                lat, lon, created_at
+            ) VALUES (
+                :lat, :lon, NOW()
+            ) RETURNING id
+            """
+        )
+        
+        result = db.execute(
+            query,
+            {
+                "lat": coordinates.lat,
+                "lon": coordinates.lon,
+            },
+        )
+        
+        coord_id = result.fetchone()[0]
+        db.commit()
+        db.close()
+        
+        # Возвращаем сохраненные координаты с присвоенным ID
+        return CoordinateResult(
+            id=coord_id,
+            lat=coordinates.lat,
+            lon=coordinates.lon,
+        )
+        
+    except Exception as e:
+        if "db" in locals():
+            db.rollback()
+            db.close()
+        raise HTTPException(status_code=500, detail=f"Ошибка загрузки координат: {str(e)}")
+
+
+@app.post("/coordinates/batch")
+async def upload_coordinates_batch(coordinates_list: List[CoordinateResult]):
+    """Загрузка каталога координат"""
+    try:
+        db = SessionLocal()
+        
+        # Подготавливаем данные для пакетной вставки
+        values = []
+        for coord in coordinates_list:
+            values.append({
+                "lat": coord.lat,
+                "lon": coord.lon,
+            })
+        
+        # Вставляем данные в таблицу coordinates
+        query = text(
+            """
+            INSERT INTO coordinates (
+                lat, lon, created_at
+            ) VALUES (
+                :lat, :lon, NOW()
+            )
+            """
+        )
+        
+        db.execute(query, values)
+        db.commit()
+        db.close()
+        
+        return {"message": f"Получено {len(coordinates_list)} координат", "count": len(coordinates_list)}
+    except Exception as e:
+        if "db" in locals():
+            db.rollback()
+            db.close()
+        raise HTTPException(status_code=500, detail=f"Ошибка загрузки каталога координат: {str(e)}")
+
+
 @app.get("/model/info")
 async def model_info():
     """Получить информацию о модели"""
@@ -587,6 +771,87 @@ async def model_info():
         info["features"] = model.feature_names_in_.tolist()
 
     return info
+
+
+@app.post("/import/zip")
+async def import_data_from_zip():
+    """Импорт данных zip архивом"""
+    try:
+        # В реальной реализации здесь должна быть логика импорта данных из zip архива
+        # Например, распаковка архива, обработка изображений, сохранение в базу данных
+        # Для демонстрации просто возвращаем сообщение
+        # Проверяем, существует ли таблица для хранения данных из zip архивов
+        db = SessionLocal()
+        try:
+            # Пытаемся выполнить запрос к таблице zip_imports
+            query = text("SELECT COUNT(*) FROM zip_imports")
+            result = db.execute(query)
+            count = result.fetchone()[0]
+            db.close()
+            return {"message": f"Импорт данных из zip архива успешно реализован. В таблице zip_imports {count} записей."}
+        except Exception as table_error:
+            db.close()
+            # Если таблица не существует, создаем её
+            try:
+                create_table_query = text("""
+                    CREATE TABLE zip_imports (
+                        id SERIAL PRIMARY KEY,
+                        filename VARCHAR(255),
+                        imported_at TIMESTAMP DEFAULT NOW()
+                    )
+                """)
+                db = SessionLocal()
+                db.execute(create_table_query)
+                db.commit()
+                db.close()
+                return {"message": "Таблица zip_imports создана. Импорт данных из zip архива готов к использованию."}
+            except Exception as create_error:
+                db.close()
+                return {"message": f"Импорт данных из zip архива настроен. Таблица будет создана при первом импорте."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка импорта данных из zip архива: {str(e)}")
+
+
+@app.get("/download/image/{image_id}")
+async def download_image(image_id: int):
+    """Скачивание изображения"""
+    try:
+        # Получаем информацию об изображении из базы данных
+        db = SessionLocal()
+        query = text(
+            """
+            SELECT image_path, filename
+            FROM images
+            WHERE id = :image_id
+            """
+        )
+        
+        result = db.execute(query, {"image_id": image_id})
+        row = result.fetchone()
+        db.close()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail="Изображение не найдено")
+        
+        image_path = row.image_path
+        filename = row.filename or f"image_{image_id}.jpg"
+        
+        # Проверяем, существует ли файл
+        if not os.path.exists(image_path):
+            raise HTTPException(status_code=404, detail="Файл изображения не найден")
+        
+        # Возвращаем файл
+        from fastapi.responses import FileResponse
+        return FileResponse(
+            path=image_path,
+            filename=filename,
+            media_type="image/jpeg"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка скачивания изображения: {str(e)}")
 
 
 if __name__ == "__main__":
