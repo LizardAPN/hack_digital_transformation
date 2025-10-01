@@ -33,7 +33,7 @@ def extract_zip_advanced(zip_path: str, extract_to: str, remove_after_extract: b
     обработкой ошибок. Поддерживает проверку целостности архива и опциональное 
     удаление исходного архива после успешного извлечения.
 
-    Параметры
+    Parameters
     ----------
     zip_path : str
         Путь к ZIP файлу, который нужно разархивировать.
@@ -43,13 +43,13 @@ def extract_zip_advanced(zip_path: str, extract_to: str, remove_after_extract: b
         Флаг, указывающий на необходимость удаления архива после 
         успешного извлечения (по умолчанию False).
 
-    Возвращает
+    Returns
     -------
     list или None
         Список имен файлов, извлеченных из архива, или None в случае ошибки.
 
-    Исключения
-    ----------
+    Raises
+    ------
     FileNotFoundError
         Возникает, если указанный ZIP файл не найден.
     ValueError
@@ -57,7 +57,7 @@ def extract_zip_advanced(zip_path: str, extract_to: str, remove_after_extract: b
     zipfile.BadZipFile
         Возникает, если архив поврежден или не является ZIP файлом.
 
-    Примеры
+    Examples
     --------
     >>> file_list = extract_zip_advanced("archive.zip", "extracted_files")
     >>> if file_list is not None:

@@ -49,8 +49,19 @@ print(f"Save directory: {save_dir}")
 
 
 def parse_args():
-    """Парсинг аргументов командной строки"""
-    parser = argparse.ArgumentParser(description="OCR Model Training")
+    """
+    Парсинг аргументов командной строки
+
+    Returns
+    -------
+    argparse.Namespace
+        Объект с распарсенными аргументами командной строки
+
+    Examples
+    --------
+    >>> args = parse_args()
+    >>> print(args.csv_path)
+    """
     parser.add_argument(
         "--csv-path", type=str, default="data/processed_data/merged_data.csv", help="Путь к CSV файлу с данными"
     )
@@ -417,12 +428,24 @@ def find_file_by_pattern(directory: Path, pattern: str) -> Optional[Path]:
     Ищет файл в директории по шаблону имени.
     Возвращает Path к первому найденному файлу или None.
 
-    Args:
-        directory: Директория для поиска
-        pattern: Шаблон имени файла
+    Parameters
+    ----------
+    directory : Path
+        Директория для поиска
+    pattern : str
+        Шаблон имени файла
 
-    Returns:
+    Returns
+    -------
+    Path или None
         Path к найденному файлу или None
+
+    Examples
+    --------
+    >>> directory = Path("/path/to/search")
+    >>> file_path = find_file_by_pattern(directory, "config")
+    >>> if file_path:
+    ...     print(f"Найден файл: {file_path}")
     """
     if not directory.exists():
         return None
@@ -437,12 +460,24 @@ def find_dir_by_pattern(directory: Path, pattern: str) -> Optional[Path]:
     Ищет директорию по шаблону имени.
     Возвращает Path к первой найденной директории или None.
 
-    Args:
-        directory: Директория для поиска
-        pattern: Шаблон имени директории
+    Parameters
+    ----------
+    directory : Path
+        Директория для поиска
+    pattern : str
+        Шаблон имени директории
 
-    Returns:
+    Returns
+    -------
+    Path или None
         Path к найденной директории или None
+
+    Examples
+    --------
+    >>> directory = Path("/path/to/search")
+    >>> dir_path = find_dir_by_pattern(directory, "images")
+    >>> if dir_path:
+    ...     print(f"Найдена директория: {dir_path}")
     """
     if not directory.exists():
         return None

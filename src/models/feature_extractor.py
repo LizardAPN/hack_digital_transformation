@@ -42,8 +42,10 @@ class FeatureExtractor:
         """
         Инициализация экстрактора признаков
 
-        Args:
-            device: Устройство для вычислений (cuda/cpu)
+        Parameters
+        ----------
+        device : str, optional
+            Устройство для вычислений (cuda/cpu) (по умолчанию None)
         """
         # Определяем устройство
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -71,11 +73,23 @@ class FeatureExtractor:
         """
         Загрузка изображения из байтов
 
-        Args:
-            image_data: Байтовые данные изображения
+        Parameters
+        ----------
+        image_data : bytes
+            Байтовые данные изображения
 
-        Returns:
+        Returns
+        -------
+        Image.Image или None
             Изображение PIL или None в случае ошибки
+
+        Examples
+        --------
+        >>> with open("image.jpg", "rb") as f:
+        ...     image_data = f.read()
+        >>> image = extractor.load_image_from_bytes(image_data)
+        >>> if image is not None:
+        ...     print(f"Изображение загружено: {image.size}")
         """
         try:
             image = Image.open(io.BytesIO(image_data))
@@ -90,11 +104,23 @@ class FeatureExtractor:
         """
         Извлечение признаков из изображения
 
-        Args:
-            image: Изображение PIL
+        Parameters
+        ----------
+        image : Image.Image
+            Изображение PIL
 
-        Returns:
+        Returns
+        -------
+        np.ndarray или None
             Массив признаков или None в случае ошибки
+
+        Examples
+        --------
+        >>> from PIL import Image
+        >>> image = Image.open("image.jpg")
+        >>> features = extractor.extract_features(image)
+        >>> if features is not None:
+        ...     print(f"Размер вектора признаков: {features.shape}")
         """
         try:
             # Применяем трансформации
@@ -118,11 +144,21 @@ class FeatureExtractor:
         """
         Обработка батча изображений {s3_key: image_data}
 
-        Args:
-            image_batch: Словарь с данными изображений
+        Parameters
+        ----------
+        image_batch : Dict[str, bytes]
+            Словарь с данными изображений
 
-        Returns:
+        Returns
+        -------
+        Dict[str, Dict[str, Any]]
             Словарь с результатами обработки
+
+        Examples
+        --------
+        >>> image_batch = {"image1.jpg": image_data1, "image2.jpg": image_data2}
+        >>> results = extractor.process_image_batch(image_batch)
+        >>> print(f"Обработано изображений: {len(results)}")
         """
         start_time = time.time()
         batch_results: Dict[str, Dict[str, Any]] = {}
@@ -151,11 +187,20 @@ class FeatureExtractor:
         """
         Получение списка всех изображений в S3 bucket
 
-        Args:
-            prefix: Префикс для фильтрации файлов
+        Parameters
+        ----------
+        prefix : str, optional
+            Префикс для фильтрации файлов (по умолчанию "")
 
-        Returns:
+        Returns
+        -------
+        List[str]
             Список ключей изображений
+
+        Examples
+        --------
+        >>> image_keys = extractor.get_all_s3_images(prefix="moscow/images/")
+        >>> print(f"Найдено изображений: {len(image_keys)}")
         """
         print("Получение списка изображений из S3...")
         image_keys = s3_manager.list_files(prefix=prefix, file_extensions=[".jpg", ".jpeg", ".png", ".webp"])
@@ -166,11 +211,21 @@ class FeatureExtractor:
         """
         Пакетная обработка всех изображений из S3
 
-        Args:
-            batch_size: Размер батча для обработки
+        Parameters
+        ----------
+        batch_size : int, optional
+            Размер батча для обработки (по умолчанию 32)
 
-        Returns:
+        Returns
+        -------
+        Tuple[Dict[str, Dict[str, Any]], List[str]]
             Кортеж из словаря признаков и списка неудачных изображений
+
+        Examples
+        --------
+        >>> features_dict, failed_images = extractor.process_all_images(batch_size=16)
+        >>> print(f"Обработано изображений: {len(features_dict)}")
+        >>> print(f"Ошибок: {len(failed_images)}")
         """
         print("Начало обработки всех изображений...")
 
@@ -228,7 +283,15 @@ class FeatureExtractor:
         """
         Получение статистики обработки
 
-        Returns:
+        Returns
+        -------
+        Dict[str, int]
             Словарь со статистикой обработки
+
+        Examples
+        --------
+        >>> stats = extractor.get_processing_stats()
+        >>> print(f"Обработано изображений: {stats['processed']}")
+        >>> print(f"Ошибок: {stats['failed']}")
         """
         return self.stats.copy()

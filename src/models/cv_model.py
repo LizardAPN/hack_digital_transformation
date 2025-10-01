@@ -40,14 +40,29 @@ class CVModel:
     """Модель компьютерного зрения для детекции зданий и определения координат"""
 
     def __init__(self):
-        """Инициализация модели CV"""
+        """
+        Инициализация модели CV
+
+        Examples
+        --------
+        >>> model = CVModel()
+        >>> result = model.process_image("path/to/image.jpg")
+        """
         self.ocr_model = OverlayOCR()
         self.feature_extractor = FeatureExtractor()
         self.indexer = None
         self._initialize_faiss_index()
 
     def _initialize_faiss_index(self):
-        """Инициализация FAISS индекса"""
+        """
+        Инициализация FAISS индекса
+
+        Examples
+        --------
+        >>> model = CVModel()
+        >>> # FAISS индекс инициализируется автоматически при создании экземпляра
+        >>> print(model.indexer.index.ntotal)
+        """
         try:
             logger.info("Инициализация FAISS индекса...")
             self.indexer = FaissIndexer(dimension=2048)
@@ -61,11 +76,21 @@ class CVModel:
         """
         Обработка изображения: детекция зданий, определение координат, OCR
 
-        Args:
-            image_path: Путь к изображению
+        Parameters
+        ----------
+        image_path : str
+            Путь к изображению
 
-        Returns:
+        Returns
+        -------
+        Dict
             Словарь с результатами обработки
+
+        Examples
+        --------
+        >>> model = CVModel()
+        >>> result = model.process_image("path/to/image.jpg")
+        >>> print(result["coordinates"])
         """
         try:
             result = {
@@ -123,11 +148,22 @@ class CVModel:
         """
         Оценка координат на основе похожих изображений
 
-        Args:
-            similar_images: Список похожих изображений с результатами поиска
+        Parameters
+        ----------
+        similar_images : List[Dict]
+            Список похожих изображений с результатами поиска
 
-        Returns:
+        Returns
+        -------
+        Dict или None
             Словарь с координатами {lat, lon} или None
+
+        Examples
+        --------
+        >>> similar_images = [{"s3_key": "img1.jpg", "distance": 0.5}]
+        >>> coords = model._estimate_coordinates(similar_images)
+        >>> if coords:
+        ...     print(f"Координаты: {coords['lat']}, {coords['lon']}")
         """
         if not similar_images:
             return None
@@ -167,11 +203,21 @@ class CVModel:
         """
         Получение координат изображения из метаданных S3
 
-        Args:
-            s3_key: Ключ объекта в S3
+        Parameters
+        ----------
+        s3_key : str
+            Ключ объекта в S3
 
-        Returns:
+        Returns
+        -------
+        Dict или None
             Словарь с координатами {lat, lon} или None
+
+        Examples
+        --------
+        >>> coords = model._get_image_coordinates_from_metadata("images/123.jpg")
+        >>> if coords:
+        ...     print(f"Координаты: {coords['lat']}, {coords['lon']}")
         """
         try:
             # Получаем метаданные объекта из S3
@@ -191,11 +237,22 @@ class CVModel:
         """
         Получение адреса по координатам
 
-        Args:
-            coordinates: Словарь с координатами {lat, lon}
+        Parameters
+        ----------
+        coordinates : Dict
+            Словарь с координатами {lat, lon}
 
-        Returns:
+        Returns
+        -------
+        str или None
             Адрес в виде строки или None
+
+        Examples
+        --------
+        >>> coords = {"lat": 55.7558, "lon": 37.6176}
+        >>> address = model._geocode_coordinates(coords)
+        >>> if address:
+        ...     print(f"Адрес: {address}")
         """
         if coordinates and "lat" in coordinates and "lon" in coordinates:
             try:
@@ -211,11 +268,20 @@ class CVModel:
         Заглушка для детекции зданий
         В текущей архитектуре используется визуальный поиск, поэтому детекция не требуется
 
-        Args:
-            image_path: Путь к изображению
+        Parameters
+        ----------
+        image_path : str
+            Путь к изображению
 
-        Returns:
+        Returns
+        -------
+        List[Dict]
             Список обнаруженных зданий
+
+        Examples
+        --------
+        >>> buildings = model._detect_buildings_placeholder("path/to/image.jpg")
+        >>> print(len(buildings))
         """
         # В текущей архитектуре мы не детектируем здания напрямую,
         # а находим похожие изображения в базе
@@ -223,5 +289,17 @@ class CVModel:
 
 
 def create_cv_model() -> CVModel:
-    """Фабричная функция для создания экземпляра CVModel"""
+    """
+    Фабричная функция для создания экземпляра CVModel
+
+    Returns
+    -------
+    CVModel
+        Экземпляр CVModel
+
+    Examples
+    --------
+    >>> model = create_cv_model()
+    >>> result = model.process_image("path/to/image.jpg")
+    """
     return CVModel()

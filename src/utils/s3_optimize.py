@@ -48,7 +48,7 @@ class S3Manager:
     включая параллельную загрузку и скачивание файлов, управление соединениями
     и сбор статистики операций.
 
-    Атрибуты
+    Attributes
     ----------
     key_id : str
         Идентификатор ключа доступа к S3.
@@ -76,7 +76,7 @@ class S3Manager:
         """
         Инициализация менеджера S3.
 
-        Параметры
+        Parameters
         ----------
         key_id : str, optional
             Идентификатор ключа доступа к S3. Если не указан, берется из переменной окружения AWS_ACCESS_KEY_ID.
@@ -92,8 +92,8 @@ class S3Manager:
         chunk_size : int, optional
             Размер части файла для multipart операций в байтах (по умолчанию 8MB).
         
-        Исключения
-        ----------
+        Raises
+        ------
         ValueError
             Возникает, если не указаны обязательные параметры подключения к S3.
         """
@@ -121,13 +121,13 @@ class S3Manager:
         Создает и возвращает клиент S3 при первом обращении. При последующих обращениях
         возвращает уже созданный клиент. Также проверяет подключение к бакету.
 
-        Возвращает
+        Returns
         -------
         boto3.Client
             Инициализированный клиент S3.
 
-        Исключения
-        ----------
+        Raises
+        ------
         Exception
             Возникает, если не удалось создать клиент или подключиться к бакету.
         """
@@ -158,7 +158,7 @@ class S3Manager:
         Для файлов размером больше chunk_size выполняет параллельную загрузку частями.
         Для маленьких файлов использует обычную загрузку.
 
-        Параметры
+        Parameters
         ----------
         data : bytes
             Данные для загрузки в виде байтов.
@@ -169,12 +169,12 @@ class S3Manager:
         metadata : dict, optional
             Дополнительные метаданные для объекта (по умолчанию None).
 
-        Возвращает
+        Returns
         -------
         bool
             True, если загрузка прошла успешно, иначе False.
 
-        Примеры
+        Examples
         --------
         >>> s3_manager = S3Manager()
         >>> data = b"some binary data"
@@ -238,7 +238,7 @@ class S3Manager:
         Внутренний метод, используемый для загрузки отдельной части файла
         в рамках multipart upload операции.
 
-        Параметры
+        Parameters
         ----------
         upload_id : str
             Идентификатор multipart upload сессии.
@@ -249,13 +249,13 @@ class S3Manager:
         data : bytes
             Данные части файла для загрузки.
 
-        Возвращает
+        Returns
         -------
         tuple
             Кортеж из номера части и ETag ответа от S3.
 
-        Исключения
-        ----------
+        Raises
+        ------
         Exception
             Возникает, если произошла ошибка при загрузке части файла.
         """
@@ -277,7 +277,7 @@ class S3Manager:
         Загружает данные в виде байтов в указанный объект S3. Подходит для
         относительно небольших файлов, которые не требуют multipart загрузки.
 
-        Параметры
+        Parameters
         ----------
         data : bytes
             Данные для загрузки в виде байтов.
@@ -288,12 +288,12 @@ class S3Manager:
         metadata : dict, optional
             Дополнительные метаданные для объекта (по умолчанию None).
 
-        Возвращает
+        Returns
         -------
         bool
             True, если загрузка прошла успешно, иначе False.
 
-        Примеры
+        Examples
         --------
         >>> s3_manager = S3Manager()
         >>> data = b"some binary data"
@@ -331,7 +331,7 @@ class S3Manager:
         использует multipart загрузку, для маленьких - стандартную загрузку.
         При необходимости может удалить исходный файл после успешной загрузки.
 
-        Параметры
+        Parameters
         ----------
         file_path : str
             Путь к локальному файлу для загрузки.
@@ -343,12 +343,12 @@ class S3Manager:
         metadata : dict, optional
             Дополнительные метаданные для объекта (по умолчанию None).
 
-        Возвращает
+        Returns
         -------
         bool
             True, если загрузка прошла успешно, иначе False.
 
-        Примеры
+        Examples
         --------
         >>> s3_manager = S3Manager()
 s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt", "path/in/s3/file.txt")
@@ -398,7 +398,7 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         производительности. Каждый файл загружается независимо с использованием
         метода upload_file_parallel.
 
-        Параметры
+        Parameters
         ----------
         file_paths : List[str]
             Список путей к локальным файлам для загрузки.
@@ -410,7 +410,7 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         progress_callback : callable, optional
             Функция обратного вызова для отслеживания прогресса загрузки (по умолчанию None).
 
-        Возвращает
+        Returns
         -------
         Dict
             Словарь с результатами загрузки, содержащий ключи:
@@ -418,7 +418,7 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
             - "failed": список кортежей (файл, сообщение об ошибке) для неудачных загрузок
             - "total": общее количество файлов для загрузки
 
-        Примеры
+        Examples
         --------
         >>> s3_manager = S3Manager()
         >>> file_paths = ["/path/to/file1.txt", "/path/to/file2.txt"]
@@ -474,7 +474,7 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         различные форматы изображений (JPEG, PNG, GIF, WEBP) и автоматически
         конвертирует изображения в RGB при необходимости.
 
-        Параметры
+        Parameters
         ----------
         image_data : Union[bytes, BinaryIO]
             Данные изображения в виде байтов или файлового объекта.
@@ -489,12 +489,12 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         metadata : dict, optional
             Дополнительные метаданные для объекта (по умолчанию None).
 
-        Возвращает
+        Returns
         -------
         bool
             True, если загрузка прошла успешно, иначе False.
 
-        Примеры
+        Examples
         --------
         >>> s3_manager = S3Manager()
         >>> with open("image.jpg", "rb") as f:
@@ -581,17 +581,17 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         Загружает объект из S3 и возвращает его содержимое в виде байтов.
         Подходит для относительно небольших файлов, которые помещаются в память.
 
-        Параметры
+        Parameters
         ----------
         s3_key : str
             Ключ объекта в S3 для загрузки.
 
-        Возвращает
+        Returns
         -------
         Optional[bytes]
             Содержимое файла в виде байтов, или None в случае ошибки.
 
-        Примеры
+        Examples
         --------
         >>> s3_manager = S3Manager()
         >>> data = s3_manager.download_bytes("path/to/file.bin")
@@ -623,19 +623,19 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         Загружает объект из S3 и сохраняет его в локальный файл. Автоматически
         создает необходимые директории в пути к файлу.
 
-        Параметры
+        Parameters
         ----------
         s3_key : str
             Ключ объекта в S3 для загрузки.
         local_path : str
             Путь к локальному файлу для сохранения данных.
 
-        Возвращает
+        Returns
         -------
         bool
             True, если загрузка прошла успешно, иначе False.
 
-        Примеры
+        Examples
         --------
         >>> s3_manager = S3Manager()
         >>> success = s3_manager.download_file("path/to/remote/file.txt", "/local/path/file.txt")
@@ -669,17 +669,17 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         Для файлов размером больше chunk_size выполняет параллельную загрузку частями.
         Для маленьких файлов использует обычную загрузку.
 
-        Параметры
+        Parameters
         ----------
         s3_key : str
             Ключ объекта в S3 для загрузки.
 
-        Возвращает
+        Returns
         -------
         Optional[bytes]
             Содержимое файла в виде байтов, или None в случае ошибки.
 
-        Примеры
+        Examples
         --------
         >>> s3_manager = S3Manager()
         >>> data = s3_manager.download_bytes_parallel("path/to/large_file.bin")
@@ -735,7 +735,7 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         Внутренний метод, используемый для загрузки отдельной части файла
         в рамках multipart download операции.
 
-        Параметры
+        Parameters
         ----------
         s3_key : str
             Ключ объекта в S3.
@@ -746,13 +746,13 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         part_num : int
             Номер части файла.
 
-        Возвращает
+        Returns
         -------
         tuple
             Кортеж из данных части файла и номера части.
 
-        Исключения
-        ----------
+        Raises
+        ------
         Exception
             Возникает, если произошла ошибка при загрузке части файла.
         """
@@ -774,7 +774,7 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         используя многопоточность для повышения производительности. Каждый файл
         загружается независимо с использованием метода download_file.
 
-        Параметры
+        Parameters
         ----------
         s3_keys : List[str]
             Список ключей объектов в S3 для загрузки.
@@ -783,7 +783,7 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         progress_callback : callable, optional
             Функция обратного вызова для отслеживания прогресса загрузки (по умолчанию None).
 
-        Возвращает
+        Returns
         -------
         Dict
             Словарь с результатами загрузки, содержащий ключи:
@@ -791,7 +791,7 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
             - "failed": список кортежей (ключ, сообщение об ошибке) для неудачных загрузок
             - "total": общее количество файлов для загрузки
 
-        Примеры
+        Examples
         --------
         >>> s3_manager = S3Manager()
         >>> s3_keys = ["path/to/file1.txt", "path/to/file2.txt"]
@@ -843,20 +843,20 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         многопоточность для повышения производительности. Каждый файл
         загружается независимо с использованием метода download_bytes.
 
-        Параметры
+        Parameters
         ----------
         s3_keys : List[str]
             Список ключей объектов в S3 для загрузки.
         progress_callback : callable, optional
             Функция обратного вызова для отслеживания прогресса загрузки (по умолчанию None).
 
-        Возвращает
+        Returns
         -------
         Dict[str, Optional[bytes]]
             Словарь, где ключи - это S3 ключи, а значения - данные файлов в виде байтов
             или None в случае ошибки загрузки конкретного файла.
 
-        Примеры
+        Examples
         --------
         >>> s3_manager = S3Manager()
         >>> s3_keys = ["path/to/file1.txt", "path/to/file2.txt"]
@@ -905,7 +905,7 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         и расширениям файлов. Поддерживает пагинацию для получения всех объектов
         в бакете или поддиректории.
 
-        Параметры
+        Parameters
         ----------
         prefix : str, optional
             Префикс для фильтрации объектов (по умолчанию "").
@@ -914,12 +914,12 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         file_extensions : List[str], optional
             Список расширений файлов для фильтрации (по умолчанию None).
 
-        Возвращает
+        Returns
         -------
         List[str]
             Список ключей объектов в S3, соответствующих критериям фильтрации.
 
-        Примеры
+        Examples
         --------
         >>> s3_manager = S3Manager()
         >>> # Получить все файлы
@@ -972,12 +972,12 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         Получает метаданные объекта в S3, включая размер, дату последнего изменения,
         тип контента и пользовательские метаданные.
 
-        Параметры
+        Parameters
         ----------
         s3_key : str
             Ключ объекта в S3 для получения информации.
 
-        Возвращает
+        Returns
         -------
         Optional[Dict]
             Словарь с информацией о файле, содержащий ключи:
@@ -987,7 +987,7 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
             - "metadata": пользовательские метаданные
             Возвращает None в случае ошибки.
 
-        Примеры
+        Examples
         --------
         >>> s3_manager = S3Manager()
         >>> info = s3_manager.get_file_info("path/to/file.txt")
@@ -1015,17 +1015,17 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         Использует head_object операцию, которая возвращает метаданные
         объекта без его загрузки.
 
-        Параметры
+        Parameters
         ----------
         s3_key : str
             Ключ объекта в S3 для проверки существования.
 
-        Возвращает
+        Returns
         -------
         bool
             True, если файл существует, иначе False.
 
-        Примеры
+        Examples
         --------
         >>> s3_manager = S3Manager()
         >>> if s3_manager.file_exists("path/to/file.txt"):
@@ -1054,7 +1054,7 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         Статистика включает количество успешных и неудачных операций, а также
         общий объем загруженных данных.
 
-        Возвращает
+        Returns
         -------
         Dict
             Словарь со статистикой загрузки, содержащий ключи:
@@ -1062,7 +1062,7 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
             - "failed": количество неудачных операций загрузки
             - "total_size": общий объем загруженных данных в байтах
 
-        Примеры
+        Examples
         --------
         >>> s3_manager = S3Manager()
         >>> stats = s3_manager.get_upload_stats()
@@ -1079,7 +1079,7 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         Статистика включает количество успешных и неудачных операций, а также
         общий объем скачанных данных.
 
-        Возвращает
+        Returns
         -------
         Dict
             Словарь со статистикой скачивания, содержащий ключи:
@@ -1087,7 +1087,7 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
             - "failed": количество неудачных операций скачивания
             - "total_size": общий объем скачанных данных в байтах
 
-        Примеры
+        Examples
         --------
         >>> s3_manager = S3Manager()
         >>> stats = s3_manager.get_download_stats()

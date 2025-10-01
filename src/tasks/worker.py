@@ -63,7 +63,19 @@ cv_model: Optional[CVModel] = None
 
 
 def get_cv_model():
-    """Получение глобального экземпляра CV модели"""
+    """
+    Получение глобального экземпляра CV модели
+
+    Returns
+    -------
+    CVModel
+        Экземпляр CV модели
+
+    Examples
+    --------
+    >>> model = get_cv_model()
+    >>> result = model.process_image("path/to/image.jpg")
+    """
     global cv_model
     if cv_model is None:
         cv_model = CVModel()
@@ -75,12 +87,22 @@ def process_image_task(self, image_path: str, request_id: str = None) -> dict:
     """
     Асинхронная задача для обработки изображения
 
-    Args:
-        image_path: Путь к изображению
-        request_id: Идентификатор запроса (для отслеживания)
+    Parameters
+    ----------
+    image_path : str
+        Путь к изображению
+    request_id : str, optional
+        Идентификатор запроса (для отслеживания) (по умолчанию None)
 
-    Returns:
+    Returns
+    -------
+    dict
         Результат обработки изображения
+
+    Examples
+    --------
+    >>> result = process_image_task("path/to/image.jpg", "req_123")
+    >>> print(result["task_id"])
     """
     try:
         logger.info(f"Начало обработки изображения: {image_path}")
@@ -120,8 +142,15 @@ def save_result_to_db(result: dict):
     """
     Сохранение результата обработки в базу данных
 
-    Args:
-        result: Результат обработки изображения
+    Parameters
+    ----------
+    result : dict
+        Результат обработки изображения
+
+    Examples
+    --------
+    >>> result = {"image_path": "path/to/image.jpg", "task_id": "task_123"}
+    >>> save_result_to_db(result)
     """
     try:
         db = SessionLocal()
@@ -187,12 +216,23 @@ def batch_process_images_task(self, image_paths: list, request_id: str = None) -
     """
     Асинхронная задача для пакетной обработки изображений
 
-    Args:
-        image_paths: Список путей к изображениям
-        request_id: Идентификатор запроса (для отслеживания)
+    Parameters
+    ----------
+    image_paths : list
+        Список путей к изображениям
+    request_id : str, optional
+        Идентификатор запроса (для отслеживания) (по умолчанию None)
 
-    Returns:
+    Returns
+    -------
+    dict
         Сводный результат обработки
+
+    Examples
+    --------
+    >>> image_paths = ["path/to/image1.jpg", "path/to/image2.jpg"]
+    >>> result = batch_process_images_task(image_paths, "req_456")
+    >>> print(result["total_processed"])
     """
     try:
         logger.info(f"Начало пакетной обработки {len(image_paths)} изображений")

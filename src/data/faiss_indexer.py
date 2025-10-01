@@ -37,8 +37,10 @@ class FaissIndexer:
         """
         Инициализация FAISS индекса
 
-        Args:
-            dimension: Размерность вектора признаков
+        Parameters
+        ----------
+        dimension : int, optional
+            Размерность вектора признаков (по умолчанию 2048)
         """
         self.dimension: int = dimension
         self.index: Optional[faiss.Index] = None
@@ -48,12 +50,24 @@ class FaissIndexer:
         """
         Создание FAISS индекса из признаков
 
-        Args:
-            features_dict: Словарь признаков {s3_key: {"features": np.ndarray, ...}}
-            index_type: Тип индекса ("Flat" или "IVF")
+        Parameters
+        ----------
+        features_dict : Dict[str, Dict[str, Any]]
+            Словарь признаков {s3_key: {"features": np.ndarray, ...}}
+        index_type : str, optional
+            Тип индекса ("Flat" или "IVF") (по умолчанию "IVF")
 
-        Returns:
+        Returns
+        -------
+        int
             Количество проиндексированных изображений
+
+        Examples
+        --------
+        >>> indexer = FaissIndexer(dimension=2048)
+        >>> features_dict = {"image1.jpg": {"features": np.random.rand(2048)}}
+        >>> num_indexed = indexer.create_index(features_dict, index_type="IVF")
+        >>> print(f"Проиндексировано изображений: {num_indexed}")
         """
         s3_keys: List[str] = []
         features_list: List[np.ndarray] = []
@@ -87,12 +101,25 @@ class FaissIndexer:
         """
         Поиск k наиболее похожих изображений
 
-        Args:
-            query_features: Вектор признаков для поиска
-            k: Количество похожих изображений для возврата
+        Parameters
+        ----------
+        query_features : np.ndarray
+            Вектор признаков для поиска
+        k : int, optional
+            Количество похожих изображений для возврата (по умолчанию 10)
 
-        Returns:
+        Returns
+        -------
+        List[Dict[str, Union[int, str, float]]]
             Список результатов поиска
+
+        Examples
+        --------
+        >>> indexer = FaissIndexer(dimension=2048)
+        >>> query_features = np.random.rand(2048)
+        >>> results = indexer.search_similar(query_features, k=5)
+        >>> for result in results:
+        ...     print(f"Ранг: {result['rank']}, Расстояние: {result['distance']}")
         """
         if self.index is None:
             raise ValueError("Индекс не инициализирован")
@@ -120,9 +147,18 @@ class FaissIndexer:
         """
         Сохранение индекса и маппинга
 
-        Args:
-            index_path: Путь для сохранения индекса
-            mapping_path: Путь для сохранения маппинга
+        Parameters
+        ----------
+        index_path : str
+            Путь для сохранения индекса
+        mapping_path : str
+            Путь для сохранения маппинга
+
+        Examples
+        --------
+        >>> indexer = FaissIndexer(dimension=2048)
+        >>> indexer.create_index(features_dict)
+        >>> indexer.save_index("data/index/faiss_index.bin", "data/processed/image_mapping.pkl")
         """
         os.makedirs(os.path.dirname(index_path), exist_ok=True)
         os.makedirs(os.path.dirname(mapping_path), exist_ok=True)
@@ -140,9 +176,18 @@ class FaissIndexer:
         """
         Загрузка индекса и маппинга
 
-        Args:
-            index_path: Путь к сохраненному индексу
-            mapping_path: Путь к сохраненному маппингу
+        Parameters
+        ----------
+        index_path : str
+            Путь к сохраненному индексу
+        mapping_path : str
+            Путь к сохраненному маппингу
+
+        Examples
+        --------
+        >>> indexer = FaissIndexer(dimension=2048)
+        >>> indexer.load_index("data/index/faiss_index.bin", "data/processed/image_mapping.pkl")
+        >>> print(f"Размер загруженного индекса: {indexer.index.ntotal}")
         """
         self.index = faiss.read_index(index_path)
 

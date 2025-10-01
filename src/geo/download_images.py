@@ -51,12 +51,24 @@ class BBoxSplitter:
         """
         Разбивает bbox на grid_size x grid_size частей
 
-        Args:
-            bbox: [min_lon, min_lat, max_lon, max_lat]
-            grid_size: количество частей по каждой оси
+        Parameters
+        ----------
+        bbox : List[float]
+            [min_lon, min_lat, max_lon, max_lat]
+        grid_size : int, optional
+            количество частей по каждой оси (по умолчанию 2)
 
-        Returns:
+        Returns
+        -------
+        List[List[float]]
             Список под-bbox'ов
+
+        Examples
+        --------
+        >>> bbox = [37.0, 55.0, 38.0, 56.0]
+        >>> sub_bboxes = BBoxSplitter.split_bbox(bbox, grid_size=2)
+        >>> print(len(sub_bboxes))
+        4
         """
         min_lon, min_lat, max_lon, max_lat = bbox
 
@@ -83,14 +95,27 @@ class BBoxSplitter:
         """
         Создает сетку bbox вокруг центральной точки
 
-        Args:
-            center_lat: широта центра
-            center_lon: долгота центра
-            grid_radius: радиус сетки (количество bbox в каждую сторону от центра)
-            bbox_size: размер каждого bbox в градусах
+        Parameters
+        ----------
+        center_lat : float
+            широта центра
+        center_lon : float
+            долгота центра
+        grid_radius : int, optional
+            радиус сетки (количество bbox в каждую сторону от центра) (по умолчанию 2)
+        bbox_size : float, optional
+            размер каждого bbox в градусах (по умолчанию 0.02)
 
-        Returns:
+        Returns
+        -------
+        List[List[float]]
             Список bbox'ов
+
+        Examples
+        --------
+        >>> bboxes = BBoxSplitter.create_bbox_grid(55.7558, 37.6176, grid_radius=1)
+        >>> print(len(bboxes))
+        9
         """
         bboxes = []
 
@@ -110,12 +135,24 @@ class BBoxSplitter:
         """
         Рассчитывает оптимальный размер сетки на основе площади bbox
 
-        Args:
-            bbox: [min_lon, min_lat, max_lon, max_lat]
-            target_bbox_area: целевая площадь каждого под-bbox (в квадратных градусах)
+        Parameters
+        ----------
+        bbox : List[float]
+            [min_lon, min_lat, max_lon, max_lat]
+        target_bbox_area : float, optional
+            целевая площадь каждого под-bbox (в квадратных градусах) (по умолчанию 0.0004)
 
-        Returns:
+        Returns
+        -------
+        int
             Оптимальный размер сетки
+
+        Examples
+        --------
+        >>> bbox = [37.0, 55.0, 38.0, 56.0]
+        >>> grid_size = BBoxSplitter.calculate_optimal_grid_size(bbox)
+        >>> print(grid_size)
+        50
         """
         min_lon, min_lat, max_lon, max_lat = bbox
         bbox_area = (max_lon - min_lon) * (max_lat - min_lat)
@@ -137,6 +174,30 @@ class MapillaryS3Client:
         max_workers: int = 10,
         cache_dir: Optional[str] = None,
     ):
+        """
+        Инициализация MapillaryS3Client
+
+        Parameters
+        ----------
+        access_token : str
+            Токен доступа к Mapillary API
+        s3_manager : S3Manager
+            Менеджер для работы с S3
+        max_workers : int, optional
+            Максимальное количество рабочих потоков (по умолчанию 10)
+        cache_dir : str, optional
+            Директория для кэширования данных (по умолчанию None)
+
+        Examples
+        --------
+        >>> s3_manager = S3Manager()
+        >>> client = MapillaryS3Client(
+        ...     access_token="your_token",
+        ...     s3_manager=s3_manager,
+        ...     max_workers=5,
+        ...     cache_dir="/tmp/mapillary_cache"
+        ... )
+        """
         self.access_token = access_token
         self.s3_manager = s3_manager
         self.max_workers = max_workers
@@ -243,13 +304,26 @@ class MapillaryS3Client:
         """
         Пакетное получение изображений для нескольких bbox
 
-        Args:
-            bboxes: список bbox'ов
-            max_results_per_bbox: максимальное количество результатов на bbox
-            use_cache: использовать кэширование
+        Parameters
+        ----------
+        bboxes : List[List[float]]
+            список bbox'ов
+        max_results_per_bbox : int, optional
+            максимальное количество результатов на bbox (по умолчанию 500)
+        use_cache : bool, optional
+            использовать кэширование (по умолчанию True)
 
-        Returns:
+        Returns
+        -------
+        List[Dict]
             Объединенный список уникальных изображений
+
+        Examples
+        --------
+        >>> client = MapillaryS3Client(access_token="token", s3_manager=s3_manager)
+        >>> bboxes = [[37.0, 55.0, 37.5, 55.5], [37.5, 55.0, 38.0, 55.5]]
+        >>> images = client.get_images_in_bbox_batch(bboxes)
+        >>> print(len(images))
         """
         all_images = []
 
@@ -292,14 +366,28 @@ class MapillaryS3Client:
         """
         Получение изображений для большого региона с автоматическим разбиением на части
 
-        Args:
-            bbox: основной bbox [min_lon, min_lat, max_lon, max_lat]
-            grid_size: размер сетки (если None, рассчитывается автоматически)
-            max_results_per_bbox: максимальное количество результатов на под-bbox
-            use_cache: использовать кэширование
+        Parameters
+        ----------
+        bbox : List[float]
+            основной bbox [min_lon, min_lat, max_lon, max_lat]
+        grid_size : int, optional
+            размер сетки (если None, рассчитывается автоматически) (по умолчанию None)
+        max_results_per_bbox : int, optional
+            максимальное количество результатов на под-bbox (по умолчанию 500)
+        use_cache : bool, optional
+            использовать кэширование (по умолчанию True)
 
-        Returns:
+        Returns
+        -------
+        List[Dict]
             Список уникальных изображений
+
+        Examples
+        --------
+        >>> client = MapillaryS3Client(access_token="token", s3_manager=s3_manager)
+        >>> bbox = [37.0, 55.0, 38.0, 56.0]
+        >>> images = client.get_images_for_large_area(bbox)
+        >>> print(len(images))
         """
         # Рассчитываем оптимальный размер сетки если не задан
         if grid_size is None:
@@ -328,16 +416,31 @@ class MapillaryS3Client:
         """
         Получение изображений вокруг центральной точки
 
-        Args:
-            center_lat: широта центра
-            center_lon: долгота центра
-            grid_radius: радиус сетки
-            bbox_size: размер каждого bbox в градусах
-            max_results_per_bbox: максимальное количество результатов на bbox
-            use_cache: использовать кэширование
+        Parameters
+        ----------
+        center_lat : float
+            широта центра
+        center_lon : float
+            долгота центра
+        grid_radius : int, optional
+            радиус сетки (по умолчанию 2)
+        bbox_size : float, optional
+            размер каждого bbox в градусах (по умолчанию 0.02)
+        max_results_per_bbox : int, optional
+            максимальное количество результатов на bbox (по умолчанию 500)
+        use_cache : bool, optional
+            использовать кэширование (по умолчанию True)
 
-        Returns:
+        Returns
+        -------
+        List[Dict]
             Список уникальных изображений
+
+        Examples
+        --------
+        >>> client = MapillaryS3Client(access_token="token", s3_manager=s3_manager)
+        >>> images = client.get_images_around_point(55.7558, 37.6176)
+        >>> print(len(images))
         """
         # Создаем сетку bbox вокруг точки
         bboxes = self.bbox_splitter.create_bbox_grid(center_lat, center_lon, grid_radius, bbox_size)
