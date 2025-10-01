@@ -36,44 +36,52 @@ from src.utils.config import DATA_PATHS, s3_manager
 logger = logging.getLogger(__name__)
 
 
+from src.data.faiss_indexer import FaissIndexer  # Импортируем ваш индексер
+
+logger = logging.getLogger(__name__)
+
 class CVModel:
-    """Модель компьютерного зрения для детекции зданий и определения координат на основе GeoCLIP"""
+    """Модель компьютерного зрения на основе GeoCLIP с поиском по FAISS"""
 
-    def __init__(self):
+    def __init__(
+        self,
+        faiss_index_path: str = "data/index/geoclip_faiss.bin",
+        mapping_path: str = "data/index/geoclip_mapping.pkl",
+        train_metadata_path: str = "data/train_metadata.csv"
+    ):
         """
-        Инициализация модели CV с использованием GeoCLIP
-
-        Examples
-        --------
-        >>> model = CVModel()
-        >>> result = model.process_image("path/to/image.jpg")
+        Инициализация модели: загрузка GeoCLIP и FAISS индекса.
         """
-        # Инициализируем GeoCLIP модель
-        self.image_encoder = ImageEncoder()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.image_encoder = self.image_encoder.to(self.device)
-        self.image_encoder.eval()
+        self.image_encoder = ImageEncoder().to(self.device).eval()
 
-    def process_image(self, image_path: str) -> Dict:
-        """
-        Обработка изображения: определение координат с помощью GeoCLIP
+        # Инициализируем FAISS
+        self.faiss_indexer = FaissIndexer(dimension=512)  # Размер эмбеддинга GeoCLIP
+        self.faiss_indexer.load_index(faiss_index_path, mapping_path)
 
-        Parameters
-        ----------
-        image_path : str
-            Путь к изображению
+        # Загружаем метаданные (координаты по ID)
+        self.metadata = self._load_metadata(train_metadata_path)
 
-        Returns
-        -------
-        Dict
-            Словарь с результатами обработки
+    def _load_metadata(self, csv_path: str) -> Dict[str, Dict[str, float]]:
+        """Загружает метаданные: s3_key -> {lat, lon}"""
+        import pandas as pd
+        df = pd.read_csv(csv_path)
+        metadata = {}
+        for _, row in df.iterrows():
+            metadata[row["s3_key"]] = {"lat": row["lat"], "lon": row["lon"]}
+        return metadata
 
-        Examples
-        --------
-        >>> model = CVModel()
-        >>> result = model.process_image("path/to/image.jpg")
-        >>> print(result["coordinates"])
-        """
+    def _encode_image(self, image: Image.Image) -> np.ndarray:
+        """Кодирует изображение в эмбеддинг"""
+        tensor = self.image_encoder.preprocess_image(image)
+        if tensor.ndim == 3:
+            tensor = tensor.unsqueeze(0)  # [C,H,W] -> [1,C,H,W]
+        tensor = tensor.to(self.device)
+        with torch.no_grad():
+            emb = self.image_encoder(tensor).cpu().numpy()
+        return emb.astype("float32")
+
+    def process_image(self, image_path: str, is_local: bool = False) -> Dict:
         try:
             result = {
                 "image_path": image_path,
@@ -84,42 +92,39 @@ class CVModel:
                 "ocr_result": None,
             }
 
-            # Загружаем изображение из S3
-            image_data = s3_manager.download_bytes(image_path)
-            if image_data is None:
-                raise FileNotFoundError(f"Не удалось загрузить изображение из S3: {image_path}")
-            
-            # Открываем изображение из байтов
-            image = Image.open(io.BytesIO(image_data))
-            if image.mode != "RGB":
-                image = image.convert("RGB")
+            # Загрузка изображения
+            if is_local:
+                image = Image.open(image_path).convert("RGB")
+            else:
+                image_data = s3_manager.download_bytes(image_path)
+                if image_data is None:
+                    raise FileNotFoundError(f"Не удалось загрузить изображение: {image_path}")
+                image = Image.open(io.BytesIO(image_data)).convert("RGB")
 
-            # Предобрабатываем изображение для GeoCLIP
-            preprocessed_image = self.image_encoder.preprocess_image(image)
-            if preprocessed_image.ndim == 3:
-                preprocessed_image = preprocessed_image.unsqueeze(0)
-            
-            # Переносим изображение на устройство
-            preprocessed_image = preprocessed_image.to(self.device)
+            # Кодирование
+            query_emb = self._encode_image(image)
 
-            # Получаем предсказания координат от GeoCLIP
-            with torch.no_grad():
-                pred_coords = self.image_encoder(preprocessed_image)
-                # pred_coords имеет форму [1, 2] с широтой и долготой
-                lat, lon = pred_coords[0].cpu().numpy()
-            
-            # Сохраняем координаты в результате
-            result["coordinates"] = {"lat": float(lat), "lon": float(lon)}
+            # Поиск ближайшего
+            results = self.faiss_indexer.search_similar(query_emb, k=1)
+            if not results:
+                raise ValueError("Не найдено ближайших изображений")
 
-            # Получаем адрес по координатам
+            nearest_s3_key = results[0]["s3_key"]
+            coords = self.metadata.get(nearest_s3_key)
+            if not coords:
+                raise ValueError(f"Нет координат для {nearest_s3_key}")
+
+            result["coordinates"] = {"lat": coords["lat"], "lon": coords["lon"]}
+
+            # Геокодирование
             try:
-                address = geocode_coordinates(lat, lon)
+                address = geocode_coordinates(coords["lat"], coords["lon"])
                 result["address"] = address
             except Exception as e:
-                logger.warning(f"Ошибка геокодирования координат {lat}, {lon}: {e}")
+                logger.warning(f"Ошибка геокодирования: {e}")
 
-            # Детектируем здания (заглушка, так как у нас GeoCLIP)
-            result["buildings"] = [{"bbox": [0, 0, 100, 100], "confidence": 1.0, "area": 10000}]  # Заглушка
+            # Заглушка для зданий
+            result["buildings"] = [{"bbox": [0, 0, 100, 100], "confidence": 1.0, "area": 10000}]
 
             return result
 
