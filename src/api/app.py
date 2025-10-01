@@ -25,7 +25,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import redis
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Cookie
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -80,6 +80,7 @@ class ImageProcessRequest(BaseModel):
 class AsyncImageProcessRequest(BaseModel):
     """Модель запроса для асинхронной обработки изображения"""
 
+    owner_id: int
     image_path: str
     request_id: Optional[str] = None
 
@@ -180,6 +181,33 @@ def load_model_and_config():
     model = None
     config = None
 
+def get_user_id_from_session(session_token: str) -> int:
+    """
+    Get user ID from session token
+    """
+    if not session_token:
+        raise HTTPException(status_code=401, detail="No session token provided")
+    
+    try:
+        db = SessionLocal()
+        query = text("""
+            SELECT id
+            FROM users
+            WHERE session_token = :session_token
+        """)
+
+        result = db.execute(query, {"session_token": session_token})
+        row = result.fetchone()
+        db.close()
+
+        if row:
+            return row[0]  # Return user ID
+        else:
+            raise HTTPException(status_code=401, detail="Invalid session token")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка получения результатов: {str(e)}")
 
 @app.on_event("startup")
 async def startup_event():
@@ -262,9 +290,8 @@ async def process_image_async(request: AsyncImageProcessRequest):
     try:
         # Используем request_id если предоставлен, иначе None
         request_id = request.request_id
-
         # Отправляем задачу в Celery
-        task = process_image_task.delay(request.image_path, request_id)
+        task = process_image_task.delay(request.owner_id, request.image_path, request_id)
 
         return AsyncTaskResponse(
             task_id=task.id, request_id=request_id, status="started", message="Задача принята в обработку"
@@ -370,27 +397,34 @@ async def get_latest_results(limit: int = 10):
 
 
 @app.get("/results/photo/{photo_id}")
-async def get_photo_results(photo_id: int):
+async def get_photo_results(photo_id: str):
     """Получение результатов обработки для конкретного фото"""
     try:
         db = SessionLocal()
         query = text(
             """
-            SELECT id, photo_id, image_path, task_id, request_id, coordinates, address, 
+            SELECT id, image_path, task_id, request_id, coordinates, address, 
                    ocr_result, buildings, processed_at, error
             FROM processing_results
-            WHERE photo_id = :photo_id
+            WHERE image_path = :image_path
             ORDER BY processed_at DESC
             LIMIT 1
         """
         )
 
-        result = db.execute(query, {"photo_id": photo_id})
+        result = db.execute(query, {"image_path": photo_id})
         row = result.fetchone()
         db.close()
-
+        
         if row:
-            return dict(row)
+            # Convert row to dictionary and handle datetime serialization
+            row_dict = list(row)
+            # Convert datetime objects to ISO format strings
+            for index in range(0, len(row_dict)):
+                if hasattr(row_dict[index], 'isoformat'):
+                    row_dict[index] = row_dict[index].isoformat()
+            
+            return row_dict
         else:
             raise HTTPException(status_code=404, detail="Результаты обработки для этого фото не найдены")
     except HTTPException:
@@ -511,8 +545,9 @@ async def search_by_address(request: SearchByAddressRequest):
 
 
 @app.get("/export/results/xlsx")
-async def export_results_xlsx():
+async def export_results_xlsx(session_token: str = Cookie(None)):
     """Экспорт результатов обработки в формате XLSX"""
+    owner_id = get_user_id_from_session(session_token)
     try:
         import pandas as pd
         from io import BytesIO
@@ -520,10 +555,11 @@ async def export_results_xlsx():
         
         # Получаем последние результаты из базы данных
         db = SessionLocal()
-        query = text("""
+        query = text(f"""
             SELECT id, image_path, task_id, request_id, coordinates, address, 
                    ocr_result, buildings, processed_at, error
             FROM processing_results
+            WHERE owner_id = {owner_id}
             ORDER BY processed_at DESC
             LIMIT 1000
         """)

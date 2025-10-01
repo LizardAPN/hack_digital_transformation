@@ -33,7 +33,7 @@ s3_client = boto3.client(
 )
 
 
-def trigger_image_processing(image_path: str, request_id: Optional[str] = None, photo_id: Optional[int] = None) -> bool:
+def trigger_image_processing(image_path: str, owner_id: int, request_id: Optional[str] = None, photo_id: Optional[int] = None) -> bool:
     """
     Trigger image processing by calling the image processing API
     
@@ -48,7 +48,8 @@ def trigger_image_processing(image_path: str, request_id: Optional[str] = None, 
     try:
         # Prepare the request payload
         payload = {
-            "image_path": image_path
+            "owner_id": owner_id,
+            "image_path": image_path,
         }
         
         if request_id:
@@ -176,7 +177,7 @@ async def upload_photo(
         conn.close()
         
         # Trigger image processing
-        processing_triggered = trigger_image_processing(photo_url, str(photo_id), photo_id)
+        processing_triggered = trigger_image_processing(photo_url, owner_id, str(photo_id), photo_id)
         
         return {
             "id": photo_id,
