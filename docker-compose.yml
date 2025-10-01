@@ -14,10 +14,12 @@ services:
       - YANDEX_GEOCODER_API_KEY=${YANDEX_GEOCODER_API_KEY}
       - GOOGLE_GEOCODER_API_KEY=${GOOGLE_GEOCODER_API_KEY}
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
+      - app-data:/app/data
+      - app-logs:/app/logs
     depends_on:
       - redis
+    networks:
+      - app-network
     restart: unless-stopped
 
   # Redis для кэширования и очередей задач
@@ -27,6 +29,8 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - app-network
     restart: unless-stopped
 
   # PostgreSQL для хранения метаданных и результатов обработки
@@ -41,6 +45,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./src/sql_scripts:/docker-entrypoint-initdb.d
+    networks:
+      - app-network
     restart: unless-stopped
 
   # Celery worker для асинхронной обработки изображений
@@ -57,11 +63,13 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/building_detector
       - REDIS_URL=redis://redis:6379/0
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
+      - app-data:/app/data
+      - app-logs:/app/logs
     depends_on:
       - redis
       - postgres
+    networks:
+      - app-network
     restart: unless-stopped
 
   # Celery beat для планирования задач
@@ -72,12 +80,20 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/building_detector
       - REDIS_URL=redis://redis:6379/0
     volumes:
-      - ./logs:/app/logs
+      - app-logs:/app/logs
     depends_on:
       - redis
       - postgres
+    networks:
+      - app-network
     restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
 
 volumes:
   redis_data:
   postgres_data:
+  app-data:
+  app-logs:

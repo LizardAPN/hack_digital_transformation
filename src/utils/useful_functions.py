@@ -30,14 +30,30 @@ import pandas as pd
 from scipy.spatial import KDTree
 
 
-def move_and_remove_files(source_dir: Path, destination_dir: Path, remove_after_move: bool = False) -> None:
+def move_and_remove_files(source_dir, destination_dir, remove_after_move=False):
     """
-    Перемещает файлы из source_dir в destination_dir и удаляет source_dir если remove_after_move=True
+    Перемещает файлы из исходной директории в целевую и при необходимости удаляет исходную директорию.
 
-    Args:
-        source_dir: Путь к исходной директории
-        destination_dir: Путь к целевой директории
-        remove_after_move: Флаг удаления исходной директории после перемещения
+    Функция перемещает все элементы из указанной исходной директории в целевую директорию.
+    Если параметр remove_after_move установлен в True, то после перемещения исходная 
+    директория удаляется.
+
+    Параметры
+    ----------
+    source_dir : Path
+        Путь к исходной директории.
+    destination_dir : Path
+        Путь к целевой директории.
+    remove_after_move : bool, optional
+        Флаг, указывающий на необходимость удаления исходной директории после перемещения 
+        (по умолчанию False).
+
+    Примеры
+    --------
+    >>> from pathlib import Path
+    >>> move_and_remove_files(Path('/path/to/source'), Path('/path/to/destination'))
+    Перенесен: file1.txt
+    Перенесен: file2.txt
     """
     if source_dir.exists() and source_dir.is_dir():
         for item in source_dir.iterdir():
@@ -57,15 +73,29 @@ def move_and_remove_files(source_dir: Path, destination_dir: Path, remove_after_
                 shutil.rmtree(source_dir)
 
 
-def extract_coordinates(coord_string: str) -> Tuple[Optional[float], Optional[float]]:
+def extract_coordinates(coord_string):
     """
-    Извлекает координаты из строки
+    Извлекает координаты из строки.
 
-    Args:
-        coord_string: Строка с координатами в формате "coordinates=[lat, lon]"
+    Функция извлекает широту и долготу из строки формата "coordinates=[широта, долгота]".
 
-    Returns:
-        Кортеж с широтой и долготой или (None, None) если не найдены
+    Параметры
+    ----------
+    coord_string : str
+        Строка, содержащая координаты в формате "coordinates=[число, число]".
+
+    Возвращает
+    -------
+    tuple
+        Кортеж из двух float значений (широта, долгота) или (None, None), если 
+        координаты не найдены.
+
+    Примеры
+    --------
+    >>> extract_coordinates("coordinates=[55.7558, 37.6173]")
+    (55.7558, 37.6173)
+    >>> extract_coordinates("no coordinates here")
+    (None, None)
     """
     pattern = r"coordinates=\[([\d.-]+),\s*([\d.-]+)\]"
     match = re.search(pattern, str(coord_string))
@@ -75,28 +105,47 @@ def extract_coordinates(coord_string: str) -> Tuple[Optional[float], Optional[fl
 
 
 def merge_tables_with_tolerance(
-    target: pd.DataFrame,
-    real_data: pd.DataFrame,
-    target_lat_name: str = "latitude",
-    target_lot_name: str = "longitude",
-    real_data_lat_name: str = "latitude",
-    real_data_lot_name: str = "longitude",
-    max_distance_meters: float = 100,
-) -> pd.DataFrame:
+    target,
+    real_data,
+    target_lat_name="latitude",
+    target_lot_name="longitude",
+    real_data_lat_name="latitude",
+    real_data_lot_name="longitude",
+    max_distance_meters=100,
+):
     """
-    Объединяет две таблицы по координатам с допустимым отклонением
+    Объединяет две таблицы по координатам с учетом допуска на расстояние.
 
-    Args:
-        target: Целевая таблица с координатами
-        real_data: Таблица с реальными данными
-        target_lat_name: Название колонки широты в target
-        target_lot_name: Название колонки долготы в target
-        real_data_lat_name: Название колонки широты в real_data
-        real_data_lot_name: Название колонки долготы в real_data
-        max_distance_meters: Максимальное расстояние в метрах для объединения
+    Функция объединяет две таблицы данных, сопоставляя записи по географическим координатам.
+    Для каждой записи в таблице target находится ближайшая запись в таблице real_data 
+    в пределах заданного максимального расстояния.
 
-    Returns:
-        Объединенный DataFrame с результатами
+    Параметры
+    ----------
+    target : pandas.DataFrame
+        Таблица с данными, к которым будут присоединены данные из real_data.
+    real_data : pandas.DataFrame
+        Таблица с реальными данными, которые будут присоединены к target.
+    target_lat_name : str, optional
+        Название столбца с широтой в таблице target (по умолчанию "latitude").
+    target_lot_name : str, optional
+        Название столбца с долготой в таблице target (по умолчанию "longitude").
+    real_data_lat_name : str, optional
+        Название столбца с широтой в таблице real_data (по умолчанию "latitude").
+    real_data_lot_name : str, optional
+        Название столбца с долготой в таблице real_data (по умолчанию "longitude").
+    max_distance_meters : int, optional
+        Максимальное расстояние в метрах для сопоставления записей (по умолчанию 100).
+
+    Возвращает
+    -------
+    pandas.DataFrame
+        Результирующая таблица с объединенными данными, отсортированная по расстоянию.
+
+    Исключения
+    ----------
+    ValueError
+        Возникает, если указанные столбцы с координатами не найдены в соответствующих таблицах.
     """
     # Проверка существования колонок
     if target_lat_name not in target.columns:
@@ -144,20 +193,30 @@ def merge_tables_with_tolerance(
 
 def levenshtein_distance(string1: str, string2: str) -> int:
     """
-    Вычисляет расстояние Левенштейна между двумя строками
+    Вычисляет расстояние Левенштейна между двумя строками.
 
-    Args:
-        string1: Первая строка
-        string2: Вторая строка
+    Расстояние Левенштейна — это минимальное количество односимвольных 
+    операций (вставки, удаления или замены), необходимых для преобразования 
+    одной строки в другую.
 
-    Returns:
-        Расстояние Левенштейна между строками
+    Параметры
+    ----------
+    string1 : str
+        Первая строка для сравнения.
+    string2 : str
+        Вторая строка для сравнения.
 
-    Examples:
-        >>> levenshtein_distance('AATZ', 'AAAZ')
-        1
-        >>> levenshtein_distance('AATZZZ', 'AAAZ')
-        3
+    Возвращает
+    -------
+    int
+        Расстояние Левенштейна между строками.
+
+    Примеры
+    --------
+    >>> levenshtein_distance('AATZ', 'AAAZ')
+    1
+    >>> levenshtein_distance('AATZZZ', 'AAAZ')
+    3
     """
     distance = 0
     if len(string1) < len(string2):
