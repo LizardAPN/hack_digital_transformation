@@ -68,8 +68,8 @@ FAISS_CONFIG = {"index_type": "IVF2048,Flat", "nlist": 2048, "metric": "l2"}
 # metadata_file: путь к файлу метаданных изображений
 DATA_PATHS = {
     "faiss_index": "data/index/faiss_index.bin",
-    "mapping_file": "data/processed/image_mapping.pkl",
-    "metadata_file": "data/processed/metadata.json",
+    "mapping_file": "data/index/image_mapping.csv",
+    "metadata_file": "data/processed_data/moscow_images.csv",
 }
 
 # Настройки производительности обработки изображений
