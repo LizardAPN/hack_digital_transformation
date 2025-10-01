@@ -188,7 +188,6 @@ def save_result_to_db(result: dict):
         db.execute(
             query,
             {
-                "photo_id": photo_id,
                 "image_path": image_path,
                 "task_id": task_id,
                 "request_id": request_id,

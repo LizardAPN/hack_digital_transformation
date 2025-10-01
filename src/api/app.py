@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-
+import os 
 # Добавляем путь к утилитам для корректной работы импортов
 utils_path = Path(__file__).resolve().parent.parent / "utils"
 if str(utils_path) not in sys.path:

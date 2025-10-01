@@ -12,7 +12,6 @@ services:
     networks:
       - app-network
 
-
   app:
     build: ..
     ports:
@@ -29,9 +28,13 @@ services:
       - AWS_BUCKET_NAME=${AWS_BUCKET_NAME}
       - YANDEX_GEOCODER_API_KEY=${YANDEX_GEOCODER_API_KEY}
       - GOOGLE_GEOCODER_API_KEY=${GOOGLE_GEOCODER_API_KEY}
+      - YANDEX_GEOCODER_API_KEY=${YANDEX_GEOCODER_API_KEY}
+      - TRANSFORMERS_OFFLINE=1
+      - HF_HUB_OFFLINE=1
     volumes:
       - ../data:/app/data
       - ../logs:/app/logs
+      - /home/lizardapn/.cache/huggingface/hub/:/root/.cache/huggingface/hub/ 
     networks:
       - app-network
 
@@ -63,10 +66,10 @@ services:
       - db
     environment:
       - DATABASE_URL=postgresql://appuser:apppassword@db:5432/appdb
-      # Конфигурация S3 - определите эти переменные в файле .env
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL}
+      - YANDEX_GEOCODER_API_KEY=${YANDEX_GEOCODER_API_KEY}
       - AWS_BUCKET_NAME=${AWS_BUCKET_NAME}
       - IMAGE_PROCESSING_API_URL=http://app:8000
     networks:
@@ -85,9 +88,13 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL}
       - AWS_BUCKET_NAME=${AWS_BUCKET_NAME}
+      - YANDEX_GEOCODER_API_KEY=${YANDEX_GEOCODER_API_KEY}
+      - TRANSFORMERS_OFFLINE=1
+      - HF_HUB_OFFLINE=1
     volumes:
       - ../data:/app/data
       - ../logs:/app/logs
+      - /home/lizardapn/.cache/huggingface/hub/:/root/.cache/huggingface/hub/ 
     networks:
       - app-network
 
