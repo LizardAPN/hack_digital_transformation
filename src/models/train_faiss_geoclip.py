@@ -387,7 +387,7 @@ def main():
     
     # Пути к данным
     S3_IMAGE_PREFIX = "site/raw_data/"  # Префикс для изображений в S3
-    JSON_COORDINATES_DIR = "/home/lizardapn/Hack_digital/hack_digital_transformation/logs/download_data/cache_moscow_images"  # Директория с JSON файлами
+    JSON_COORDINATES_DIR = "logs/download_data/cache_moscow_images"  # Директория с JSON файлами
     OUTPUT_INDEX_PATH = "data/index/faiss_index.bin"  # Путь для сохранения индекса
     OUTPUT_MAPPING_PATH = "data/index/image_mapping.csv"  # Путь для сохранения маппинга
     

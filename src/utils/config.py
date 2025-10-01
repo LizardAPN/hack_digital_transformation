@@ -69,7 +69,7 @@ FAISS_CONFIG = {"index_type": "IVF2048,Flat", "nlist": 2048, "metric": "l2"}
 DATA_PATHS = {
     "faiss_index": "data/index/faiss_index.bin",
     "mapping_file": "data/index/image_mapping.csv",
-    "metadata_file": "data/processed_data/moscow_images.csv",
+    "metadata_file": "data/processed/moscow_images.csv",
 }
 
 # Настройки производительности обработки изображений

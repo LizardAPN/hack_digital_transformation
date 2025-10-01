@@ -131,7 +131,7 @@ class CVModel:
         self,
         faiss_index_path: str = "data/index/faiss_index.bin",
         mapping_path: str = "data/index/image_mapping.csv",
-        train_metadata_path: str = "data/processed_data/moscow_images.csv"
+        train_metadata_path: str = "data/processed/moscow_images.csv"
     ):
         """
         Инициализация модели: загрузка GeoCLIP и FAISS индекса.

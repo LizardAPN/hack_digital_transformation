@@ -28,8 +28,8 @@ services:
       - AWS_BUCKET_NAME=${AWS_BUCKET_NAME}
       - YANDEX_GEOCODER_API_KEY=${YANDEX_GEOCODER_API_KEY}
       - GOOGLE_GEOCODER_API_KEY=${GOOGLE_GEOCODER_API_KEY}
-      - TRANSFORMERS_OFFLINE=1
-      - HF_HUB_OFFLINE=1
+      #- TRANSFORMERS_OFFLINE=1
+      #- HF_HUB_OFFLINE=1
     volumes:
       - ../data:/app/data
       - ../logs:/app/logs
@@ -88,8 +88,8 @@ services:
       - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL}
       - AWS_BUCKET_NAME=${AWS_BUCKET_NAME}
       - YANDEX_GEOCODER_API_KEY=${YANDEX_GEOCODER_API_KEY}
-      - TRANSFORMERS_OFFLINE=1
-      - HF_HUB_OFFLINE=1
+      #- TRANSFORMERS_OFFLINE=1
+      #- HF_HUB_OFFLINE=1
     volumes:
       - ../data:/app/data
       - ../logs:/app/logs
