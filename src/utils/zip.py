@@ -1,9 +1,31 @@
-import os
-import zipfile
+import sys
 from pathlib import Path
 
+# Добавляем путь к утилитам для корректной работы импортов
+utils_path = Path(__file__).resolve().parent.parent / "utils"
+if str(utils_path) not in sys.path:
+    sys.path.insert(0, str(utils_path))
 
-def extract_zip_advanced(zip_path, extract_to, remove_after_extract=False):
+# Настраиваем пути проекта
+try:
+    from path_resolver import setup_project_paths
+
+    setup_project_paths()
+except ImportError:
+    # Если path_resolver недоступен, добавляем необходимые пути вручную
+    src_path = Path(__file__).resolve().parent.parent
+    paths_to_add = [src_path, src_path / "utils", src_path / "geo"]
+    for path in paths_to_add:
+        path_str = str(path)
+        if path.exists() and path_str not in sys.path:
+            sys.path.insert(0, path_str)
+from pathlib import Path
+from typing import List, Optional
+import os
+import zipfile
+
+
+def extract_zip_advanced(zip_path: str, extract_to: str, remove_after_extract: bool = False) -> Optional[List[str]]:
     """
     Разархивирует ZIP файл с обработкой ошибок и опцией удаления архива.
 
@@ -11,7 +33,7 @@ def extract_zip_advanced(zip_path, extract_to, remove_after_extract=False):
     обработкой ошибок. Поддерживает проверку целостности архива и опциональное 
     удаление исходного архива после успешного извлечения.
 
-    Параметры
+    Parameters
     ----------
     zip_path : str
         Путь к ZIP файлу, который нужно разархивировать.
@@ -21,13 +43,13 @@ def extract_zip_advanced(zip_path, extract_to, remove_after_extract=False):
         Флаг, указывающий на необходимость удаления архива после 
         успешного извлечения (по умолчанию False).
 
-    Возвращает
+    Returns
     -------
     list или None
         Список имен файлов, извлеченных из архива, или None в случае ошибки.
 
-    Исключения
-    ----------
+    Raises
+    ------
     FileNotFoundError
         Возникает, если указанный ZIP файл не найден.
     ValueError
@@ -35,7 +57,7 @@ def extract_zip_advanced(zip_path, extract_to, remove_after_extract=False):
     zipfile.BadZipFile
         Возникает, если архив поврежден или не является ZIP файлом.
 
-    Примеры
+    Examples
     --------
     >>> file_list = extract_zip_advanced("archive.zip", "extracted_files")
     >>> if file_list is not None:
@@ -62,7 +84,7 @@ def extract_zip_advanced(zip_path, extract_to, remove_after_extract=False):
 
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             # Получаем информацию о файлах в архиве
-            file_list = zip_ref.namelist()
+            file_list: List[str] = zip_ref.namelist()
             print(f"Файлы в архиве: {file_list}")
 
             # Извлекаем все файлы

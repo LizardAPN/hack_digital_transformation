@@ -1,10 +1,32 @@
+import sys
+from pathlib import Path
+
+# Добавляем путь к утилитам для корректной работы импортов
+utils_path = Path(__file__).resolve().parent.parent / "utils"
+if str(utils_path) not in sys.path:
+    sys.path.insert(0, str(utils_path))
+
+# Настраиваем пути проекта
+try:
+    from path_resolver import setup_project_paths
+
+    setup_project_paths()
+except ImportError:
+    # Если path_resolver недоступен, добавляем необходимые пути вручную
+    src_path = Path(__file__).resolve().parent.parent
+    paths_to_add = [src_path, src_path / "utils", src_path / "geo"]
+    for path in paths_to_add:
+        path_str = str(path)
+        if path.exists() and path_str not in sys.path:
+            sys.path.insert(0, path_str)
 import json
 import os
 import pickle
+from typing import Any, Dict, List, Union
 
 import faiss
 
-from utils.config import DATA_PATHS, s3_manager
+from src.utils.config import DATA_PATHS, s3_manager
 
 
 def monitor_database():
@@ -17,16 +39,16 @@ def monitor_database():
     - Метаданных сборки системы
     - Подключения к облачному хранилищу S3
 
-    Параметры
+    Parameters
     ----------
-    Отсутствуют
+    None
 
-    Вывод
+    Returns
     -------
     None
         Выводит информацию о состоянии системы в стандартный поток вывода.
 
-    Примеры
+    Examples
     --------
     >>> monitor_database()
     === МОНИТОРИНГ БАЗЫ ДАННЫХ ===
@@ -50,7 +72,7 @@ def monitor_database():
     if os.path.exists(DATA_PATHS["mapping_file"]):
         try:
             with open(DATA_PATHS["mapping_file"], "rb") as f:
-                mapping = pickle.load(f)
+                mapping: Dict[Any, Any] = pickle.load(f)
             print(f"✓ Маппинг: {len(mapping)} записей")
         except Exception as e:
             print(f"✗ Ошибка загрузки маппинга: {e}")
@@ -61,7 +83,7 @@ def monitor_database():
     if os.path.exists(DATA_PATHS["metadata_file"]):
         try:
             with open(DATA_PATHS["metadata_file"], "r") as f:
-                metadata = json.load(f)
+                metadata: Dict[str, Union[str, int, float, bool, List[Any], Dict[Any, Any]]] = json.load(f)
             print("✓ Метаданные сборки:")
             for key, value in metadata.items():
                 if key != "processing_stats":

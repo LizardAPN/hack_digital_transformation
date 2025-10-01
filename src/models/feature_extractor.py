@@ -1,5 +1,27 @@
+import sys
+from pathlib import Path
+
+# Добавляем путь к утилитам для корректной работы импортов
+utils_path = Path(__file__).resolve().parent.parent / "utils"
+if str(utils_path) not in sys.path:
+    sys.path.insert(0, str(utils_path))
+
+# Настраиваем пути проекта
+try:
+    from path_resolver import setup_project_paths
+
+    setup_project_paths()
+except ImportError:
+    # Если path_resolver недоступен, добавляем необходимые пути вручную
+    src_path = Path(__file__).resolve().parent.parent
+    paths_to_add = [src_path, src_path / "utils", src_path / "models"]
+    for path in paths_to_add:
+        path_str = str(path)
+        if path.exists() and path_str not in sys.path:
+            sys.path.insert(0, path_str)
+
+from typing import Dict, List, Tuple, Optional, Any
 import io
-import pickle
 import time
 
 import numpy as np
@@ -14,13 +36,33 @@ from utils.config import MODEL_CONFIG, s3_manager
 
 
 class FeatureExtractor:
-    def __init__(self, device=None):
+    """Класс для извлечения признаков из изображений с помощью ResNet50"""
+
+    def __init__(self, device: Optional[str] = None) -> None:
+        """
+        Инициализация экстрактора признаков
+
+        Parameters
+        ----------
+        device : str, optional
+            Устройство для вычислений (cuda/cpu) (по умолчанию None)
+        """
         # Определяем устройство
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Используется устройство: {self.device}")
 
-        # Загружаем предобученную ResNet50
-        self.model = models.resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
+        # Загружаем предобученную ResNet50 с обработкой ошибок
+        try:
+            self.model = models.resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
+        except Exception as e:
+            print(f"Ошибка загрузки весов модели из интернета: {e}")
+            print("Попытка загрузить модель без предобученных весов...")
+            try:
+                self.model = models.resnet50(weights=None)
+            except Exception as e2:
+                print(f"Ошибка загрузки модели без весов: {e2}")
+                raise RuntimeError("Не удалось загрузить модель ResNet50")
+        
         self.model = nn.Sequential(*list(self.model.children())[:-1])
         self.model.eval()
         self.model.to(self.device)
@@ -35,10 +77,30 @@ class FeatureExtractor:
         )
 
         # Статистика обработки
-        self.stats = {"processed": 0, "failed": 0, "total_time": 0}
+        self.stats: Dict[str, int] = {"processed": 0, "failed": 0, "total_time": 0}
 
-    def load_image_from_bytes(self, image_data: bytes) -> Image.Image:
-        """Загрузка изображения из байтов"""
+    def load_image_from_bytes(self, image_data: bytes) -> Optional[Image.Image]:
+        """
+        Загрузка изображения из байтов
+
+        Parameters
+        ----------
+        image_data : bytes
+            Байтовые данные изображения
+
+        Returns
+        -------
+        Image.Image или None
+            Изображение PIL или None в случае ошибки
+
+        Examples
+        --------
+        >>> with open("image.jpg", "rb") as f:
+        ...     image_data = f.read()
+        >>> image = extractor.load_image_from_bytes(image_data)
+        >>> if image is not None:
+        ...     print(f"Изображение загружено: {image.size}")
+        """
         try:
             image = Image.open(io.BytesIO(image_data))
             if image.mode != "RGB":
@@ -48,8 +110,28 @@ class FeatureExtractor:
             print(f"Ошибка загрузки изображения из байтов: {e}")
             return None
 
-    def extract_features(self, image: Image.Image) -> np.ndarray:
-        """Извлечение признаков из изображения"""
+    def extract_features(self, image: Image.Image) -> Optional[np.ndarray]:
+        """
+        Извлечение признаков из изображения
+
+        Parameters
+        ----------
+        image : Image.Image
+            Изображение PIL
+
+        Returns
+        -------
+        np.ndarray или None
+            Массив признаков или None в случае ошибки
+
+        Examples
+        --------
+        >>> from PIL import Image
+        >>> image = Image.open("image.jpg")
+        >>> features = extractor.extract_features(image)
+        >>> if features is not None:
+        ...     print(f"Размер вектора признаков: {features.shape}")
+        """
         try:
             # Применяем трансформации
             image_tensor = self.transform(image).unsqueeze(0).to(self.device)
@@ -68,10 +150,28 @@ class FeatureExtractor:
             print(f"Ошибка извлечения признаков: {e}")
             return None
 
-    def process_image_batch(self, image_batch: dict) -> dict:
-        """Обработка батча изображений {s3_key: image_data}"""
+    def process_image_batch(self, image_batch: Dict[str, bytes]) -> Dict[str, Dict[str, Any]]:
+        """
+        Обработка батча изображений {s3_key: image_data}
+
+        Parameters
+        ----------
+        image_batch : Dict[str, bytes]
+            Словарь с данными изображений
+
+        Returns
+        -------
+        Dict[str, Dict[str, Any]]
+            Словарь с результатами обработки
+
+        Examples
+        --------
+        >>> image_batch = {"image1.jpg": image_data1, "image2.jpg": image_data2}
+        >>> results = extractor.process_image_batch(image_batch)
+        >>> print(f"Обработано изображений: {len(results)}")
+        """
         start_time = time.time()
-        batch_results = {}
+        batch_results: Dict[str, Dict[str, Any]] = {}
 
         for s3_key, image_data in image_batch.items():
             # Загружаем изображение из байтов
@@ -93,15 +193,50 @@ class FeatureExtractor:
 
         return batch_results
 
-    def get_all_s3_images(self, prefix: str = "") -> list:
-        """Получение списка всех изображений в S3 bucket"""
+    def get_all_s3_images(self, prefix: str = "") -> List[str]:
+        """
+        Получение списка всех изображений в S3 bucket
+
+        Parameters
+        ----------
+        prefix : str, optional
+            Префикс для фильтрации файлов (по умолчанию "")
+
+        Returns
+        -------
+        List[str]
+            Список ключей изображений
+
+        Examples
+        --------
+        >>> image_keys = extractor.get_all_s3_images(prefix="moscow/images/")
+        >>> print(f"Найдено изображений: {len(image_keys)}")
+        """
         print("Получение списка изображений из S3...")
         image_keys = s3_manager.list_files(prefix=prefix, file_extensions=[".jpg", ".jpeg", ".png", ".webp"])
         print(f"Найдено {len(image_keys)} изображений")
         return image_keys
 
-    def process_all_images(self, batch_size: int = 32) -> dict:
-        """Пакетная обработка всех изображений из S3"""
+    def process_all_images(self, batch_size: int = 32) -> Tuple[Dict[str, Dict[str, Any]], List[str]]:
+        """
+        Пакетная обработка всех изображений из S3
+
+        Parameters
+        ----------
+        batch_size : int, optional
+            Размер батча для обработки (по умолчанию 32)
+
+        Returns
+        -------
+        Tuple[Dict[str, Dict[str, Any]], List[str]]
+            Кортеж из словаря признаков и списка неудачных изображений
+
+        Examples
+        --------
+        >>> features_dict, failed_images = extractor.process_all_images(batch_size=16)
+        >>> print(f"Обработано изображений: {len(features_dict)}")
+        >>> print(f"Ошибок: {len(failed_images)}")
+        """
         print("Начало обработки всех изображений...")
 
         # Получаем список всех изображений
@@ -112,8 +247,8 @@ class FeatureExtractor:
             print("Не найдено изображений для обработки")
             return {}, []
 
-        features_dict = {}
-        failed_images = []
+        features_dict: Dict[str, Dict[str, Any]] = {}
+        failed_images: List[str] = []
 
         # Обработка батчами
         for i in tqdm(range(0, total_images, batch_size)):
@@ -154,6 +289,19 @@ class FeatureExtractor:
 
         return features_dict, failed_images
 
-    def get_processing_stats(self) -> dict:
-        """Получение статистики обработки"""
+    def get_processing_stats(self) -> Dict[str, int]:
+        """
+        Получение статистики обработки
+
+        Returns
+        -------
+        Dict[str, int]
+            Словарь со статистикой обработки
+
+        Examples
+        --------
+        >>> stats = extractor.get_processing_stats()
+        >>> print(f"Обработано изображений: {stats['processed']}")
+        >>> print(f"Ошибок: {stats['failed']}")
+        """
         return self.stats.copy()

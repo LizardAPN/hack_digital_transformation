@@ -8,6 +8,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const uploadStatus = document.getElementById('upload-status');
     const addPhotoCard = document.getElementById('add-photo-card');
     
+    // Search elements
+    const searchInput = document.getElementById('search-input');
+    const searchButton = document.getElementById('search-button');
+    const searchResults = document.getElementById('search-results');
+    
+    // Export elements
+    const exportXlsxButton = document.getElementById('export-xlsx-button');
+    
     // Modal elements
     const modal = document.getElementById('photo-modal');
     const modalImage = document.getElementById('modal-image');
@@ -44,6 +52,19 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
+    // Event listener for search button
+    searchButton.addEventListener('click', function() {
+        const query = searchInput.value.trim();
+        if (query) {
+            searchPhotos(query);
+        }
+    });
+    
+    // Event listener for export XLSX button
+    exportXlsxButton.addEventListener('click', function() {
+        exportToXlsx();
+    });
+    
     // Function to upload photo
     function uploadPhoto(file) {
         uploadStatus.textContent = 'Uploading...';
@@ -67,6 +88,7 @@ document.addEventListener('DOMContentLoaded', function() {
             uploadStatus.textContent = 'Upload successful!';
             uploadStatus.className = 'upload-status success';
             loadPhotos(); // Refresh photo grid
+            photoUploadInput.value = ''; // Reset file input to allow re-upload of same file
             setTimeout(() => {
                 uploadStatus.textContent = '';
                 uploadStatus.className = 'upload-status';
@@ -76,6 +98,7 @@ document.addEventListener('DOMContentLoaded', function() {
             uploadStatus.textContent = 'Upload failed. Please try again.';
             uploadStatus.className = 'upload-status error';
             console.error('Upload error:', error);
+            photoUploadInput.value = ''; // Reset file input to allow re-upload of same file
         });
     }
     
@@ -87,7 +110,33 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(response => response.json())
         .then(data => {
-            displayPhotos(data.photos);
+            // Для каждого фото запрашиваем результаты обработки
+            const photosWithResults = data.photos.map(photo => {
+                return fetch(`/api/results/photo/${photo.id}`, {
+                    method: 'GET',
+                    credentials: 'include'
+                })
+                .then(response => {
+                    if (response.ok) {
+                        return response.json();
+                    } else {
+                        return null;
+                    }
+                })
+                .then(result => {
+                    return {...photo, processing_result: result};
+                })
+                .catch(error => {
+                    console.error('Error loading processing result for photo:', photo.id, error);
+                    return {...photo, processing_result: null};
+                });
+            });
+            
+            // Ждем завершения всех запросов
+            Promise.all(photosWithResults)
+                .then(photos => {
+                    displayPhotos(photos);
+                });
         })
         .catch(error => {
             console.error('Error loading photos:', error);
@@ -104,9 +153,26 @@ document.addEventListener('DOMContentLoaded', function() {
         photos.forEach(photo => {
             const photoCard = document.createElement('div');
             photoCard.className = 'photo-card';
+            
+            // Determine processing status
+            let statusHtml = '';
+            if (photo.processing_result) {
+                if (photo.processing_result.error) {
+                    statusHtml = `<p class="photo-status error">Ошибка обработки</p>`;
+                } else if (photo.processing_result.coordinates) {
+                    const coords = photo.processing_result.coordinates;
+                    statusHtml = `<p class="photo-status success">Координаты: ${coords.lat?.toFixed(6)}, ${coords.lon?.toFixed(6)}</p>`;
+                } else {
+                    statusHtml = `<p class="photo-status processing">Обработка...</p>`;
+                }
+            } else {
+                statusHtml = `<p class="photo-status unknown">Статус неизвестен</p>`;
+            }
+            
             photoCard.innerHTML = `
                 <img src="${photo.photo_url}" alt="${photo.created_at}" class="photo-thumbnail">
-                <p class="photo-name">${photo.created_at}</p>
+                <p class="photo-name">${new Date(photo.created_at).toLocaleString()}</p>
+                ${statusHtml}
             `;
             
             // Add click event to open modal
@@ -121,8 +187,111 @@ document.addEventListener('DOMContentLoaded', function() {
     // Function to open photo in modal
     function openPhotoModal(photo) {
         modalImage.src = photo.photo_url;
-        modalCaption.innerHTML = `<h3>${photo.created_at}</h3><p>Uploaded: ${new Date(photo.created_at).toLocaleString()}</p>`;
+        
+        // Build caption with processing results
+        let captionHtml = `<h3>${new Date(photo.created_at).toLocaleString()}</h3>`;
+        captionHtml += `<p>Uploaded: ${new Date(photo.created_at).toLocaleString()}</p>`;
+        
+        if (photo.processing_result) {
+            if (photo.processing_result.error) {
+                captionHtml += `<p class="modal-error">Ошибка обработки: ${photo.processing_result.error}</p>`;
+            } else {
+                if (photo.processing_result.coordinates) {
+                    const coords = photo.processing_result.coordinates;
+                    captionHtml += `<p class="modal-coordinates"><strong>Координаты:</strong> ${coords.lat?.toFixed(6)}, ${coords.lon?.toFixed(6)}</p>`;
+                }
+                
+                if (photo.processing_result.address) {
+                    captionHtml += `<p class="modal-address"><strong>Адрес:</strong> ${photo.processing_result.address}</p>`;
+                }
+                
+                if (photo.processing_result.processed_at) {
+                    captionHtml += `<p class="modal-processed"><strong>Обработано:</strong> ${new Date(photo.processing_result.processed_at).toLocaleString()}</p>`;
+                }
+            }
+        } else {
+            captionHtml += `<p class="modal-info">Результаты обработки еще не доступны</p>`;
+        }
+        
+        modalCaption.innerHTML = captionHtml;
         modal.style.display = 'block';
+    }
+    
+    // Function to search photos by coordinates or address
+    function searchPhotos(query) {
+        searchResults.innerHTML = '<p>Searching...</p>';
+        
+        // Check if query is coordinates (lat,lon format)
+        const coordMatch = query.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+        
+        if (coordMatch) {
+            // Search by coordinates
+            const lat = parseFloat(coordMatch[1]);
+            const lon = parseFloat(coordMatch[2]);
+            
+            fetch('/api/search/by_coordinates', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ lat: lat, lon: lon, radius_km: 1.0 }),
+                credentials: 'include'
+            })
+            .then(response => response.json())
+            .then(data => {
+                displaySearchResults(data);
+            })
+            .catch(error => {
+                searchResults.innerHTML = '<p>Error searching by coordinates.</p>';
+                console.error('Search error:', error);
+            });
+        } else {
+            // Search by address
+            fetch('/api/search/by_address', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ address: query }),
+                credentials: 'include'
+            })
+            .then(response => response.json())
+            .then(data => {
+                displaySearchResults(data);
+            })
+            .catch(error => {
+                searchResults.innerHTML = '<p>Error searching by address.</p>';
+                console.error('Search error:', error);
+            });
+        }
+    }
+    
+    // Function to display search results
+    function displaySearchResults(results) {
+        if (results.length === 0) {
+            searchResults.innerHTML = '<p>No results found.</p>';
+            return;
+        }
+        
+        let html = '<h4>Search Results:</h4><div class="search-results-grid">';
+        results.forEach(result => {
+            html += `
+                <div class="search-result-item">
+                    <p><strong>Coordinates:</strong> ${result.coordinates.lat}, ${result.coordinates.lon}</p>
+                    <p><strong>Address:</strong> ${result.address || 'N/A'}</p>
+                    <p><strong>Distance:</strong> ${result.distance_km ? result.distance_km.toFixed(2) + ' km' : 'N/A'}</p>
+                    <p><strong>Processed:</strong> ${new Date(result.processed_at).toLocaleString()}</p>
+                </div>
+            `;
+        });
+        html += '</div>';
+        
+        searchResults.innerHTML = html;
+    }
+    
+    // Function to export data to XLSX
+    function exportToXlsx() {
+        window.location.href = '/api/export/results/xlsx';
     }
     
     // Load photos when page loads

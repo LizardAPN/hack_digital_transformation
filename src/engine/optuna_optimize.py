@@ -1,7 +1,27 @@
+import sys
+from pathlib import Path
+
+# Добавляем путь к утилитам для корректной работы импортов
+utils_path = Path(__file__).resolve().parent.parent / "utils"
+if str(utils_path) not in sys.path:
+    sys.path.insert(0, str(utils_path))
+
+# Настраиваем пути проекта
+try:
+    from path_resolver import setup_project_paths
+
+    setup_project_paths()
+except ImportError:
+    # Если path_resolver недоступен, добавляем необходимые пути вручную
+    src_path = Path(__file__).resolve().parent.parent
+    paths_to_add = [src_path, src_path / "utils", src_path / "geo"]
+    for path in paths_to_add:
+        path_str = str(path)
+        if path.exists() and path_str not in sys.path:
+            sys.path.insert(0, path_str)
 import argparse
 import json
 import os
-import sys
 import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -16,122 +36,32 @@ import torch.nn as nn
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 
-# =============================================================================
-# КРИТИЧЕСКИЕ ИСПРАВЛЕНИЯ ДЛЯ DATASPHERE
-# =============================================================================
-
-
-# Динамическое определение путей для работы в DataSphere
-current_file = Path(__file__).resolve()
-project_root_in_cloud = Path("/job")  # Явно указываем корень в облаке
-local_project_root = current_file.parent.parent
-
-# Выбираем корень в зависимости от окружения
-# Проверяем, находимся ли мы в среде DataSphere (существует ли папка /job)
-if project_root_in_cloud.exists():
-    ROOT_DIR = project_root_in_cloud
-    print("✓ Обнаружена среда DataSphere. Используем путь /job")
-else:
-    ROOT_DIR = local_project_root
-    print("✓ Обнаружена локальная среда. Используем локальный путь")
-
-# Добавляем возможные пути к модулям в sys.path
-possible_paths_to_models = [
-    ROOT_DIR / "models",  # Папка models в корне
-    ROOT_DIR / "src" / "models",  # Папка models внутри src
-    ROOT_DIR,  # Сам корень проекта
-    ROOT_DIR / "src",  # Папка src
-    ROOT_DIR / "utils",  # Папка utils в корне
-    ROOT_DIR / "src" / "utils",  # Папка utils внутри src
-]
-
-for path in possible_paths_to_models:
-    path_str = str(path)
-    if path.exists() and path_str not in sys.path:
-        sys.path.insert(0, path_str)
-        print(f"✓ Добавлен путь: {path}")
-
-# Также добавляем родительскую директорию текущего файла
-current_parent = str(current_file.parent)
-if current_parent not in sys.path:
-    sys.path.insert(0, current_parent)
-
-print("=" * 60)
-print("FINAL ENVIRONMENT INFO:")
-print(f"Current file: {current_file}")
-print(f"ROOT_DIR: {ROOT_DIR}")
-print(f"Current working directory: {Path.cwd()}")
-print(f"Python will look for modules in:")
-for i, path in enumerate(sys.path[:10]):  # Показываем первые 10 путей
-    print(f"  {i+1}. {path}")
-print("=" * 60)
-
-# Диагностика: что действительно есть в облаке
-print("\nCHECKING CLOUD ENVIRONMENT STRUCTURE:")
-check_paths = [ROOT_DIR, Path(".")]
-for path in check_paths:
-    if path.exists():
-        print(f"\nСодержимое {path}:")
-        try:
-            items = list(path.iterdir())
-            if not items:
-                print("  [EMPTY]")
-            for item in items:
-                item_type = "DIR" if item.is_dir() else "FILE"
-                print(f"  [{item_type}] {item.name}")
-        except Exception as e:
-            print(f"  Ошибка доступа: {e}")
-print("=" * 60)
-
-# Теперь пробуем импортировать
-try:
-    from models.OCR_model import OverlayOCR
-
-    print("✓ Модуль models.OCR_model успешно импортирован")
-except ImportError as e:
-    print(f"✗ Ошибка импорта models.OCR_model: {e}")
-    # Попробуем альтернативный путь
-    try:
-        # Если модуль в той же директории, что и main.py
-        from OCR_model import OverlayOCR
-
-        print("✓ Модуль OCR_model успешно импортирован из текущей директории")
-    except ImportError as e2:
-        print(f"✗ Ошибка импорта OCR_model: {e2}")
-        raise
-
-try:
-    from utils.useful_functions import levenshtein_distance
-
-    print("✓ Модуль utils.useful_functions успешно импортирован")
-except ImportError as e:
-    print(f"✗ Ошибка импорта utils.useful_functions: {e}")
-    # Попробуем альтернативный путь
-    try:
-        from useful_functions import levenshtein_distance
-
-        print("✓ Модуль useful_functions успешно импортирован из текущей директории")
-    except ImportError as e2:
-        print(f"✗ Ошибка импорта useful_functions: {e2}")
-
-        # Создаем заглушку, если функция не найдена
-        def levenshtein_distance(s1, s2):
-            print(f"WARNING: Using dummy levenshtein_distance for '{s1}' and '{s2}'")
-            return abs(len(s1) - len(s2))
-
-        print("✓ Создана заглушка для levenshtein_distance")
+from src.models.OCR_model import OverlayOCR
+from src.utils.useful_functions import levenshtein_distance
+from src.utils.config import PROJECT_ROOT
 
 warnings.filterwarnings("ignore")
 
 # Директория для сохранения результатов
-save_dir = ROOT_DIR / "models" / "ocr_model"
+save_dir = PROJECT_ROOT / "models" / "ocr_model"
 save_dir.mkdir(parents=True, exist_ok=True)
 print(f"Save directory: {save_dir}")
 
 
 def parse_args():
-    """Парсинг аргументов командной строки"""
-    parser = argparse.ArgumentParser(description="OCR Model Training")
+    """
+    Парсинг аргументов командной строки
+
+    Returns
+    -------
+    argparse.Namespace
+        Объект с распарсенными аргументами командной строки
+
+    Examples
+    --------
+    >>> args = parse_args()
+    >>> print(args.csv_path)
+    """
     parser.add_argument(
         "--csv-path", type=str, default="data/processed_data/merged_data.csv", help="Путь к CSV файлу с данными"
     )
@@ -493,29 +423,65 @@ class OCRModel:
         return OverlayOCR(**self.best_params)
 
 
-def find_file_by_pattern(directory, pattern):
+def find_file_by_pattern(directory: Path, pattern: str) -> Optional[Path]:
     """
     Ищет файл в директории по шаблону имени.
     Возвращает Path к первому найденному файлу или None.
+
+    Parameters
+    ----------
+    directory : Path
+        Директория для поиска
+    pattern : str
+        Шаблон имени файла
+
+    Returns
+    -------
+    Path или None
+        Path к найденному файлу или None
+
+    Examples
+    --------
+    >>> directory = Path("/path/to/search")
+    >>> file_path = find_file_by_pattern(directory, "config")
+    >>> if file_path:
+    ...     print(f"Найден файл: {file_path}")
     """
-    path = Path(directory)
-    if not path.exists():
+    if not directory.exists():
         return None
-    for file_path in path.iterdir():
+    for file_path in directory.iterdir():
         if file_path.is_file() and pattern in file_path.name:
             return file_path
     return None
 
 
-def find_dir_by_pattern(directory, pattern):
+def find_dir_by_pattern(directory: Path, pattern: str) -> Optional[Path]:
     """
     Ищет директорию по шаблону имени.
     Возвращает Path к первой найденной директории или None.
+
+    Parameters
+    ----------
+    directory : Path
+        Директория для поиска
+    pattern : str
+        Шаблон имени директории
+
+    Returns
+    -------
+    Path или None
+        Path к найденной директории или None
+
+    Examples
+    --------
+    >>> directory = Path("/path/to/search")
+    >>> dir_path = find_dir_by_pattern(directory, "images")
+    >>> if dir_path:
+    ...     print(f"Найдена директория: {dir_path}")
     """
-    path = Path(directory)
-    if not path.exists():
+    if not directory.exists():
         return None
-    for dir_path in path.iterdir():
+    for dir_path in directory.iterdir():
         if dir_path.is_dir() and pattern in dir_path.name:
             return dir_path
     return None

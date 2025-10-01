@@ -1,49 +1,84 @@
-# Nginx Static File Server
+# Статический файловый сервер Nginx и веб-интерфейс
 
-This project contains a Docker container configuration for serving static HTML and CSS files using nginx.
+Этот проект содержит конфигурацию Docker контейнера для обслуживания статических HTML, CSS и JavaScript файлов с использованием nginx. Он предоставляет веб-интерфейс для приложения определения зданий.
 
-## Files Included
+## Включенные файлы
 
-- `login.html` - Login page
-- `register.html` - Registration page
-- `styles.css` - Stylesheet for both pages
+- `login.html` - Страница входа
+- `register.html` - Страница регистрации
+- `workbench.html` - Основной интерфейс приложения
+- `styles.css` - Таблица стилей для всех страниц
+- `login.js` - JavaScript для функциональности входа
+- `register.js` - JavaScript для функциональности регистрации
+- `workbench.js` - JavaScript для основной функциональности приложения
+- `logout.js` - JavaScript для функциональности выхода
 
-## Docker Setup
+## Настройка Docker
 
-### Build the Docker Image
+### Сборка образа Docker
 
 ```bash
 docker build -t nginx-static-server .
 ```
 
-### Run the Container
+### Запуск контейнера
 
 ```bash
 docker run -d -p 8080:80 --name static-server nginx-static-server
 ```
 
-### Access the Pages
+### Доступ к страницам
 
-After running the container, you can access the pages at:
-- Login page: http://localhost:8080/login.html
-- Registration page: http://localhost:8080/register.html
+После запуска контейнера вы можете получить доступ к страницам по адресам:
+- Страница входа: http://localhost:8080/login.html
+- Страница регистрации: http://localhost:8080/register.html
+- Рабочая среда (основное приложение): http://localhost:8080/workbench.html
 
-### Stop the Container
+### Остановка контейнера
 
 ```bash
 docker stop static-server
 ```
 
-### Remove the Container
+### Удаление контейнера
 
 ```bash
 docker rm static-server
 ```
 
-## Configuration
+## Возможности веб-интерфейса
 
-The nginx server is configured to:
-- Serve static files from the `/usr/share/nginx/html/` directory
-- Listen on port 80
-- Include security headers
-- Enable gzip compression for text-based files
+Веб-интерфейс предоставляет следующую функциональность:
+
+### Аутентификация
+- Регистрация и вход пользователей
+- Управление сессиями
+- Функциональность выхода
+
+### Управление фотографиями
+- Загрузка фотографий для обработки
+- Просмотр загруженных фотографий в виде сетки
+- Просмотр деталей фотографии в модальном окне
+
+### Определение зданий
+- Автоматическое определение координат и адреса для загруженных фотографий
+- Отображение распознанных зданий с ограничивающими рамками
+- Отображение результатов OCR
+
+### Функциональность поиска
+- Поиск фотографий по координатам (широта, долгота)
+- Поиск фотографий по адресу
+- Отображение результатов поиска с информацией о расстоянии
+
+### Экспорт данных
+- Экспорт результатов обработки в формат XLSX
+- Загрузка экспортированных данных
+
+## Конфигурация
+
+Сервер nginx настроен на:
+- Обслуживание статических файлов из директории `/usr/share/nginx/html/`
+- Прослушивание порта 80
+- Включение заголовков безопасности
+- Включение сжатия gzip для текстовых файлов
+- Проксирование API запросов к бэкенд сервисам

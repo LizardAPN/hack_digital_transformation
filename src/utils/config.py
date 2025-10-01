@@ -1,6 +1,43 @@
-import os
+import sys
+from pathlib import Path
 
-from utils.s3_optimize import S3Manager
+# Добавляем путь к утилитам для корректной работы импортов
+utils_path = Path(__file__).resolve().parent.parent / "utils"
+if str(utils_path) not in sys.path:
+    sys.path.insert(0, str(utils_path))
+
+# Настраиваем пути проекта
+try:
+    from path_resolver import setup_project_paths
+
+    setup_project_paths()
+except ImportError:
+    # Если path_resolver недоступен, добавляем необходимые пути вручную
+    src_path = Path(__file__).resolve().parent.parent
+    paths_to_add = [src_path, src_path / "utils", src_path / "geo"]
+    for path in paths_to_add:
+        path_str = str(path)
+        if path.exists() and path_str not in sys.path:
+            sys.path.insert(0, path_str)
+import os
+from pathlib import Path
+from typing import Dict, Tuple, Optional, Any
+
+# Определяем корневую директорию проекта
+# Используем переменную окружения PROJECT_ROOT если задана, иначе определяем автоматически
+PROJECT_ROOT: Path = Path(os.getenv("PROJECT_ROOT", Path(__file__).parent.parent.parent)).resolve()
+
+# Пути к основным директориям
+SRC_DIR: Path = PROJECT_ROOT / "src"
+MODELS_DIR: Path = SRC_DIR / "models"
+UTILS_DIR: Path = SRC_DIR / "utils"
+DATA_DIR: Path = PROJECT_ROOT / "data"
+
+# Создаем директории если они не существуют
+for directory in [SRC_DIR, MODELS_DIR, UTILS_DIR, DATA_DIR]:
+    directory.mkdir(parents=True, exist_ok=True)
+
+from src.utils.s3_optimize import S3Manager
 
 # Менеджер подключения к хранилищу S3
 # Используется для загрузки и скачивания файлов из облачного хранилища
