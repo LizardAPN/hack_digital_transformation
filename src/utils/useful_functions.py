@@ -1,12 +1,29 @@
-import collections
-import itertools
-import os
+import sys
+from pathlib import Path
+
+# Добавляем путь к утилитам для корректной работы импортов
+utils_path = Path(__file__).resolve().parent.parent / "utils"
+if str(utils_path) not in sys.path:
+    sys.path.insert(0, str(utils_path))
+
+# Настраиваем пути проекта
+try:
+    from path_resolver import setup_project_paths
+
+    setup_project_paths()
+except ImportError:
+    # Если path_resolver недоступен, добавляем необходимые пути вручную
+    src_path = Path(__file__).resolve().parent.parent
+    paths_to_add = [src_path, src_path / "utils", src_path / "geo"]
+    for path in paths_to_add:
+        path_str = str(path)
+        if path.exists() and path_str not in sys.path:
+            sys.path.insert(0, path_str)
+from pathlib import Path
+from typing import Tuple, Optional, List, Any
 import re
 import shutil
-import zipfile
 from itertools import zip_longest
-from math import atan2, cos, radians, sin, sqrt
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -14,6 +31,30 @@ from scipy.spatial import KDTree
 
 
 def move_and_remove_files(source_dir, destination_dir, remove_after_move=False):
+    """
+    Перемещает файлы из исходной директории в целевую и при необходимости удаляет исходную директорию.
+
+    Функция перемещает все элементы из указанной исходной директории в целевую директорию.
+    Если параметр remove_after_move установлен в True, то после перемещения исходная 
+    директория удаляется.
+
+    Parameters
+    ----------
+    source_dir : Path
+        Путь к исходной директории.
+    destination_dir : Path
+        Путь к целевой директории.
+    remove_after_move : bool, optional
+        Флаг, указывающий на необходимость удаления исходной директории после перемещения 
+        (по умолчанию False).
+
+    Examples
+    --------
+    >>> from pathlib import Path
+    >>> move_and_remove_files(Path('/path/to/source'), Path('/path/to/destination'))
+    Перенесен: file1.txt
+    Перенесен: file2.txt
+    """
     if source_dir.exists() and source_dir.is_dir():
         for item in source_dir.iterdir():
             try:
@@ -33,7 +74,29 @@ def move_and_remove_files(source_dir, destination_dir, remove_after_move=False):
 
 
 def extract_coordinates(coord_string):
-    """Извлекает координаты из строки"""
+    """
+    Извлекает координаты из строки.
+
+    Функция извлекает широту и долготу из строки формата "coordinates=[широта, долгота]".
+
+    Parameters
+    ----------
+    coord_string : str
+        Строка, содержащая координаты в формате "coordinates=[число, число]".
+
+    Returns
+    -------
+    tuple
+        Кортеж из двух float значений (широта, долгота) или (None, None), если 
+        координаты не найдены.
+
+    Examples
+    --------
+    >>> extract_coordinates("coordinates=[55.7558, 37.6173]")
+    (55.7558, 37.6173)
+    >>> extract_coordinates("no coordinates here")
+    (None, None)
+    """
     pattern = r"coordinates=\[([\d.-]+),\s*([\d.-]+)\]"
     match = re.search(pattern, str(coord_string))
     if match:
@@ -50,6 +113,40 @@ def merge_tables_with_tolerance(
     real_data_lot_name="longitude",
     max_distance_meters=100,
 ):
+    """
+    Объединяет две таблицы по координатам с учетом допуска на расстояние.
+
+    Функция объединяет две таблицы данных, сопоставляя записи по географическим координатам.
+    Для каждой записи в таблице target находится ближайшая запись в таблице real_data 
+    в пределах заданного максимального расстояния.
+
+    Parameters
+    ----------
+    target : pandas.DataFrame
+        Таблица с данными, к которым будут присоединены данные из real_data.
+    real_data : pandas.DataFrame
+        Таблица с реальными данными, которые будут присоединены к target.
+    target_lat_name : str, optional
+        Название столбца с широтой в таблице target (по умолчанию "latitude").
+    target_lot_name : str, optional
+        Название столбца с долготой в таблице target (по умолчанию "longitude").
+    real_data_lat_name : str, optional
+        Название столбца с широтой в таблице real_data (по умолчанию "latitude").
+    real_data_lot_name : str, optional
+        Название столбца с долготой в таблице real_data (по умолчанию "longitude").
+    max_distance_meters : int, optional
+        Максимальное расстояние в метрах для сопоставления записей (по умолчанию 100).
+
+    Returns
+    -------
+    pandas.DataFrame
+        Результирующая таблица с объединенными данными, отсортированная по расстоянию.
+
+    Raises
+    ------
+    ValueError
+        Возникает, если указанные столбцы с координатами не найдены в соответствующих таблицах.
+    """
     # Проверка существования колонок
     if target_lat_name not in target.columns:
         raise ValueError(f"Колонка {target_lat_name} не найдена в target")
@@ -94,8 +191,28 @@ def merge_tables_with_tolerance(
     return result.reset_index(drop=True)
 
 
-def levenshtein_distance(string1, string2):
+def levenshtein_distance(string1: str, string2: str) -> int:
     """
+    Вычисляет расстояние Левенштейна между двумя строками.
+
+    Расстояние Левенштейна — это минимальное количество односимвольных 
+    операций (вставки, удаления или замены), необходимых для преобразования 
+    одной строки в другую.
+
+    Parameters
+    ----------
+    string1 : str
+        Первая строка для сравнения.
+    string2 : str
+        Вторая строка для сравнения.
+
+    Returns
+    -------
+    int
+        Расстояние Левенштейна между строками.
+
+    Examples
+    --------
     >>> levenshtein_distance('AATZ', 'AAAZ')
     1
     >>> levenshtein_distance('AATZZZ', 'AAAZ')

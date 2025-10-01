@@ -1,3 +1,25 @@
+import sys
+from pathlib import Path
+
+# Добавляем путь к утилитам для корректной работы импортов
+utils_path = Path(__file__).resolve().parent.parent / "utils"
+if str(utils_path) not in sys.path:
+    sys.path.insert(0, str(utils_path))
+
+# Настраиваем пути проекта
+try:
+    from path_resolver import setup_project_paths
+
+    setup_project_paths()
+except ImportError:
+    # Если path_resolver недоступен, добавляем необходимые пути вручную
+    src_path = Path(__file__).resolve().parent.parent
+    paths_to_add = [src_path, src_path / "utils", src_path / "geo"]
+    for path in paths_to_add:
+        path_str = str(path)
+        if path.exists() and path_str not in sys.path:
+            sys.path.insert(0, path_str)
+from typing import Dict, List, Any, Optional, Tuple, Union
 import os
 import pickle
 
@@ -5,88 +27,85 @@ import faiss
 import numpy as np
 from tqdm import tqdm
 
-from utils.config import FAISS_CONFIG
+from src.utils.config import FAISS_CONFIG
+
 
 
 class FaissIndexer:
-    def __init__(self, dimension=2048):
+    """FAISS индекс для поиска похожих изображений по эмбеддингам"""
+    
+    def __init__(self, dimension: int = 512):
         self.dimension = dimension
         self.index = None
-        self.image_mapping = {}
-
-    def create_index(self, features_dict, index_type="IVF"):
-        """Создание FAISS индекса из признаков"""
-        s3_keys = []
-        features_list = []
-
-        print("Подготовка данных для FAISS...")
-        for i, (s3_key, data) in enumerate(tqdm(features_dict.items())):
-            s3_keys.append(s3_key)
-            features_list.append(data["features"])
-
-            self.image_mapping[i] = {"s3_key": s3_key, "features": data["features"]}
-
-        features_matrix = np.array(features_list).astype("float32")
-        print(f"Размер матрицы признаков: {features_matrix.shape}")
-
-        # Создание индекса
-        if index_type == "Flat":
-            self.index = faiss.IndexFlatL2(self.dimension)
-        elif index_type == "IVF":
-            quantizer = faiss.IndexFlatL2(self.dimension)
-            self.index = faiss.IndexIVFFlat(quantizer, self.dimension, FAISS_CONFIG["nlist"], faiss.METRIC_L2)
-
-            print("Обучение FAISS индекса...")
-            self.index.train(features_matrix)
-
-        print("Добавление данных в индекс...")
-        self.index.add(features_matrix)
-
-        return len(features_matrix)
-
-    def search_similar(self, query_features, k=10):
-        """Поиск k наиболее похожих изображений"""
-        if self.index is None:
-            raise ValueError("Индекс не инициализирован")
-
-        query_features = query_features.astype("float32").reshape(1, -1)
-
-        distances, indices = self.index.search(query_features, k)
-
-        results = []
-        for i, (distance, idx) in enumerate(zip(distances[0], indices[0])):
-            if idx in self.image_mapping:
-                results.append(
-                    {
-                        "rank": i + 1,
-                        "s3_key": self.image_mapping[idx]["s3_key"],
-                        "distance": float(distance),
-                        "similarity_score": 1 / (1 + distance),
-                        "index_id": int(idx),
+        self.mapping = {}  # index_id -> metadata
+        self.reverse_mapping = {}  # s3_key -> index_id
+    
+    def load_index(self, index_path: str, mapping_path: str):
+        """Загружает FAISS индекс и маппинг"""
+        try:
+            if os.path.exists(index_path):
+                self.index = faiss.read_index(index_path)
+                logger.info(f"FAISS индекс загружен: {index_path}")
+            else:
+                logger.warning(f"FAISS индекс не найден: {index_path}")
+                return
+            
+            # Загружаем маппинг
+            if os.path.exists(mapping_path):
+                df = pd.read_csv(mapping_path)
+                for _, row in df.iterrows():
+                    index_id = int(row['index_id'])
+                    self.mapping[index_id] = {
+                        's3_key': row['s3_key'],
+                        'lat': row.get('lat'),
+                        'lon': row.get('lon')
                     }
-                )
-
-        return results
-
-    def save_index(self, index_path, mapping_path):
-        """Сохранение индекса и маппинга"""
-        os.makedirs(os.path.dirname(index_path), exist_ok=True)
-        os.makedirs(os.path.dirname(mapping_path), exist_ok=True)
-
-        faiss.write_index(self.index, index_path)
-
-        with open(mapping_path, "wb") as f:
-            pickle.dump(self.image_mapping, f)
-
-        print(f"Индекс сохранен: {index_path}")
-        print(f"Маппинг сохранен: {mapping_path}")
-
-    def load_index(self, index_path, mapping_path):
-        """Загрузка индекса и маппинга"""
-        self.index = faiss.read_index(index_path)
-
-        with open(mapping_path, "rb") as f:
-            self.image_mapping = pickle.load(f)
-
-        print(f"Индекс загружен: {index_path}")
-        print(f"Размер индекса: {self.index.ntotal}")
+                    self.reverse_mapping[row['s3_key']] = index_id
+                logger.info(f"Загружено {len(self.mapping)} записей маппинга")
+            else:
+                logger.warning(f"Файл маппинга не найден: {mapping_path}")
+                
+        except Exception as e:
+            logger.error(f"Ошибка загрузки FAISS индекса: {e}")
+    
+    def search_similar(self, query_embedding: np.ndarray, k: int = 5) -> List[Dict]:
+        """Поиск k ближайших соседей"""
+        if self.index is None:
+            logger.error("FAISS индекс не загружен")
+            return []
+        
+        try:
+            # Нормализуем запрос для косинусного расстояния
+            query_norm = self._l2_normalize(query_embedding)
+            
+            # Поиск в индексе
+            scores, indices = self.index.search(query_norm, k)
+            
+            results = []
+            for i, (score, idx) in enumerate(zip(scores[0], indices[0])):
+                if idx in self.mapping:
+                    metadata = self.mapping[idx]
+                    results.append({
+                        "s3_key": metadata['s3_key'],
+                        "similarity": float(score),
+                        "rank": i + 1,
+                        "lat": metadata.get('lat'),
+                        "lon": metadata.get('lon')
+                    })
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Ошибка поиска в FAISS: {e}")
+            return []
+    
+    def _l2_normalize(self, x: np.ndarray, eps: float = 1e-12) -> np.ndarray:
+        """L2 нормализация векторов"""
+        if x.ndim == 1:
+            x = x.reshape(1, -1)
+        norm = np.linalg.norm(x, ord=2, axis=1, keepdims=True)
+        return x / np.maximum(norm, eps)
+    
+    def get_index_size(self) -> int:
+        """Возвращает размер индекса"""
+        return self.index.ntotal if self.index else 0

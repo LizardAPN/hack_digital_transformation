@@ -1,6 +1,6 @@
 UV = uv
 
-.PHONY: help install install-dev install-prod test lint format data train evaluate serve docker clean mlflow-ui
+.PHONY: help install install-dev install-prod test lint format notebooks-lint notebooks-format notebooks-clean data train evaluate serve docker clean mlflow-ui
 
 help:
 	@echo "Доступные команды:"
@@ -10,6 +10,9 @@ help:
 	@echo "  make test        Запустить тесты"
 	@echo "  make lint        Проверить код линтером"
 	@echo "  make format      Форматировать код"
+	@echo "  make notebooks-lint  Проверить Jupyter ноутбуки линтером"
+	@echo "  make notebooks-format  Форматировать Jupyter ноутбуки"
+	@echo "  make notebooks-clean  Очистить выводы из Jupyter ноутбуков"
 	@echo "  make data        Загрузить и подготовить данные"
 	@echo "  make train       Обучить модель"
 	@echo "  make evaluate    Оценить модель"
@@ -38,6 +41,16 @@ lint:
 format:
 	PYTHONPATH=. $(UV) run black src/ tests/
 	PYTHONPATH=. $(UV) run isort src/ tests/
+
+notebooks-lint:
+	PYTHONPATH=. $(UV) run flake8-nb notebooks/
+	PYTHONPATH=. $(UV) run black --check notebooks/
+
+notebooks-format:
+	PYTHONPATH=. $(UV) run black notebooks/
+
+notebooks-clean:
+	PYTHONPATH=. $(UV) run nbstripout notebooks/**/*.ipynb
 
 data:
 	PYTHONPATH=. $(UV) run python src/data/make_dataset.py

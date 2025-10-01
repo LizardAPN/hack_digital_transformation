@@ -6,19 +6,43 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - fastapi
+      - auth
       - photo-upload
+      - app
     networks:
       - app-network
 
-  fastapi:
-    build: ./FastAPI
+  app:
+    build: ..
     ports:
       - "8000"
     depends_on:
       - db
+      - redis
     environment:
       - DATABASE_URL=postgresql://appuser:apppassword@db:5432/appdb
+      - REDIS_URL=redis://redis:6379/0
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL}
+      - AWS_BUCKET_NAME=${AWS_BUCKET_NAME}
+      - YANDEX_GEOCODER_API_KEY=${YANDEX_GEOCODER_API_KEY}
+      - GOOGLE_GEOCODER_API_KEY=${GOOGLE_GEOCODER_API_KEY}
+      - TRANSFORMERS_OFFLINE=1
+      - HF_HUB_OFFLINE=1
+    volumes:
+      - ../data:/app/data
+      - ../logs:/app/logs
+      - /home/lizardapn/.cache/huggingface/hub/:/root/.cache/huggingface/hub/ 
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
     networks:
       - app-network
 
@@ -41,10 +65,35 @@ services:
       - db
     environment:
       - DATABASE_URL=postgresql://appuser:apppassword@db:5432/appdb
-      - S3_BUCKET=web-server
-      - S3_ENDPOINT=https://storage.yandexcloud.net
-      - S3_ACCESS_KEY=YCAJE3It1Ok3S-dnBCUSAO6iW
-      - S3_SECRET_KEY=YCNY5wtY03s2JeCjY1uaX_2lATIkeyJ0pDKCxXCC
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL}
+      - YANDEX_GEOCODER_API_KEY=${YANDEX_GEOCODER_API_KEY}
+      - AWS_BUCKET_NAME=${AWS_BUCKET_NAME}
+      - IMAGE_PROCESSING_API_URL=http://app:8000
+    networks:
+      - app-network
+
+  worker:
+    build: ..
+    command: celery -A src.tasks.worker worker --loglevel=info
+    depends_on:
+      - redis
+      - db
+    environment:
+      - DATABASE_URL=postgresql://appuser:apppassword@db:5432/appdb
+      - REDIS_URL=redis://redis:6379/0
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL}
+      - AWS_BUCKET_NAME=${AWS_BUCKET_NAME}
+      - YANDEX_GEOCODER_API_KEY=${YANDEX_GEOCODER_API_KEY}
+      - TRANSFORMERS_OFFLINE=1
+      - HF_HUB_OFFLINE=1
+    volumes:
+      - ../data:/app/data
+      - ../logs:/app/logs
+      - /home/lizardapn/.cache/huggingface/hub/:/root/.cache/huggingface/hub/ 
     networks:
       - app-network
 
@@ -66,3 +115,4 @@ networks:
     driver: bridge
 volumes:
   pgdata:
+  redis_data:

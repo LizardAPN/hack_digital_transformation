@@ -1,24 +1,88 @@
+import sys
+from pathlib import Path
+
+# Добавляем путь к утилитам для корректной работы импортов
+utils_path = Path(__file__).resolve().parent.parent / "utils"
+if str(utils_path) not in sys.path:
+    sys.path.insert(0, str(utils_path))
+
+# Настраиваем пути проекта
+try:
+    from path_resolver import setup_project_paths
+
+    setup_project_paths()
+except ImportError:
+    # Если path_resolver недоступен, добавляем необходимые пути вручную
+    src_path = Path(__file__).resolve().parent.parent
+    paths_to_add = [src_path, src_path / "utils", src_path / "geo"]
+    for path in paths_to_add:
+        path_str = str(path)
+        if path.exists() and path_str not in sys.path:
+            sys.path.insert(0, path_str)
+from typing import Dict, List, Any
 import json
 import os
 import pickle
 import time
+from pathlib import Path
 
 import torch
 
 from data.faiss_indexer import FaissIndexer
 from models.feature_extractor import FeatureExtractor
-from utils.config import DATA_PATHS, s3_manager
+from utils.config import DATA_PATHS, sref3_manager
 
 
 def create_directories():
-    """Создание необходимых директорий"""
+    """
+    Создание необходимых директорий для хранения обработанных данных и индексов.
+
+    Функция создает две директории:
+    - data/processed: для хранения промежуточных данных и метаданных
+    - data/index: для хранения FAISS индексов
+
+    Parameters
+    ----------
+    Отсутствуют
+
+    Returns
+    -------
+    None
+
+    Examples
+    --------
+    >>> create_directories()
+    Директории созданы
+    """
     os.makedirs("data/processed", exist_ok=True)
     os.makedirs("data/index", exist_ok=True)
     print("Директории созданы")
 
 
 def validate_s3_connection():
-    """Проверка подключения к S3"""
+    """
+    Проверка подключения к S3.
+
+    Функция проверяет возможность подключения к облачному хранилищу S3,
+    используя экземпляр s3_manager. Выполняет тестовую операцию для
+    подтверждения работоспособности соединения.
+
+    Parameters
+    ----------
+    Отсутствуют
+
+    Returns
+    -------
+    bool
+        True, если подключение успешно установлено, иначе False.
+
+    Examples
+    --------
+    >>> if validate_s3_connection():
+    ...     print("Подключение к S3 установлено")
+    ... else:
+    ...     print("Ошибка подключения к S3")
+    """
     print("Проверка подключения к S3...")
     try:
         # Пробуем получить список файлов (ограничиваемся 1 для проверки)
@@ -34,7 +98,7 @@ def validate_s3_connection():
         return False
 
 
-def main():
+def main() -> None:
     print("=== Фаза 1: Построение базы данных изображений Москвы ===")
     print("Версия: PyTorch + S3Manager")
     start_time = time.time()
@@ -56,7 +120,7 @@ def main():
     print("1. Извлечение признаков из изображений в S3...")
 
     extractor = FeatureExtractor()
-    features_dict, failed_images = extractor.process_all_images(batch_size=64)
+    features_dict, failed_images = extractor.process_all_images(batch_size=256)
 
     if not features_dict:
         print("Не удалось извлечь признаки ни из одного изображения")
@@ -64,7 +128,8 @@ def main():
 
     # Сохраняем сырые признаки (опционально, для отладки)
     print("Сохранение сырых признаков...")
-    with open("data/processed/raw_features.pkl", "wb") as f:
+    raw_features_path = PROJECT_ROOT / "data" / "processed" / "raw_features.pkl"
+    with open(raw_features_path, "wb") as f:
         pickle.dump(features_dict, f)
 
     # 2. Создание FAISS индекса
@@ -115,10 +180,11 @@ def main():
 
     # Сохраняем список неудачных изображений
     if failed_images:
-        with open("data/processed/failed_images.txt", "w") as f:
+        failed_images_path = PROJECT_ROOT / "data" / "processed" / "failed_images.txt"
+        with open(failed_images_path, "w") as f:
             for img in failed_images:
                 f.write(f"{img}\n")
-        print(f"Список неудачных изображений сохранен: data/processed/failed_images.txt")
+        print(f"Список неудачных изображений сохранен: {failed_images_path}")
 
 
 if __name__ == "__main__":
