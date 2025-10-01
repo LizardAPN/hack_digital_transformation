@@ -9,14 +9,17 @@ document.addEventListener('DOMContentLoaded', function() {
             actionButton.className = 'action-button';
             sidebarActions.appendChild(actionButton);
         }
-        
-        // Add logout button
+    }
+    
+    // Add logout button to the bottom of the sidebar
+    const logoutContainer = document.querySelector('.logout-container');
+    if (logoutContainer) {
         const logoutButton = document.createElement('button');
         logoutButton.textContent = 'Logout';
         logoutButton.className = 'action-button';
         logoutButton.style.marginTop = 'auto';
         logoutButton.style.marginBottom = '20px';
-        sidebarActions.appendChild(logoutButton);
+        logoutContainer.appendChild(logoutButton);
         
         logoutButton.addEventListener('click', async function() {
             try {
