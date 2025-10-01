@@ -17,10 +17,10 @@ app = FastAPI()
 
 # Environment variables
 DATABASE_URL = os.getenv("DATABASE_URL")
-AWS_ACCESS_KEY_ID = os.getenv("S3_ACCESS_KEY")
-AWS_SECRET_ACCESS_KEY = os.getenv("S3_SECRET_KEY")
-AWS_ENDPOINT_URL = os.getenv("S3_ENDPOINT")
-S3_BUCKET_NAME = os.getenv("S3_BUCKET")
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_ENDPOINT_URL = os.getenv("AWS_ENDPOINT_URL")
+S3_BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
 # API endpoint for image processing
 IMAGE_PROCESSING_API_URL = os.getenv("IMAGE_PROCESSING_API_URL", "http://fastapi:8000")
 
@@ -33,13 +33,14 @@ s3_client = boto3.client(
 )
 
 
-def trigger_image_processing(image_path: str, request_id: str = None) -> bool:
+def trigger_image_processing(image_path: str, request_id: str = None, photo_id: int = None) -> bool:
     """
     Trigger image processing by calling the image processing API
     
     Args:
         image_path: Path to the image in S3
         request_id: Optional request ID for tracking
+        photo_id: Optional photo ID for linking results
         
     Returns:
         True if processing was triggered successfully, False otherwise
@@ -52,6 +53,9 @@ def trigger_image_processing(image_path: str, request_id: str = None) -> bool:
         
         if request_id:
             payload["request_id"] = request_id
+            
+        if photo_id:
+            payload["photo_id"] = photo_id
             
         # Call the image processing API
         response = requests.post(
@@ -170,7 +174,7 @@ async def upload_photo(
         conn.close()
         
         # Trigger image processing
-        processing_triggered = trigger_image_processing(photo_url, str(photo_id))
+        processing_triggered = trigger_image_processing(photo_url, str(photo_id), photo_id)
         
         return {
             "id": photo_id,

@@ -83,7 +83,7 @@ def get_cv_model():
 
 
 @celery_app.task(bind=True)
-def process_image_task(self, image_path: str, request_id: str = None) -> dict:
+def process_image_task(self, image_path: str, request_id: str = None, photo_id: int = None) -> dict:
     """
     Асинхронная задача для обработки изображения
 
@@ -159,6 +159,7 @@ def save_result_to_db(result: dict):
         image_path = result.get("image_path", "")
         task_id = result.get("task_id", "")
         request_id = result.get("request_id", "")
+        photo_id = result.get("photo_id", None)
         coordinates = result.get("coordinates", {})
         address = result.get("address", "")
         ocr_result = result.get("ocr_result", {})
@@ -175,10 +176,10 @@ def save_result_to_db(result: dict):
         query = text(
             """
             INSERT INTO processing_results (
-                image_path, task_id, request_id, coordinates, address, 
+                photo_id, image_path, task_id, request_id, coordinates, address, 
                 ocr_result, buildings, processed_at, error
             ) VALUES (
-                :image_path, :task_id, :request_id, :coordinates, :address,
+                :photo_id, :image_path, :task_id, :request_id, :coordinates, :address,
                 :ocr_result, :buildings, :processed_at, :error
             )
         """
@@ -187,6 +188,7 @@ def save_result_to_db(result: dict):
         db.execute(
             query,
             {
+                "photo_id": photo_id,
                 "image_path": image_path,
                 "task_id": task_id,
                 "request_id": request_id,
@@ -247,7 +249,7 @@ def batch_process_images_task(self, image_paths: list, request_id: str = None) -
                 self.update_state(state="PROGRESS", meta={"current": i, "total": len(image_paths)})
 
                 # Обрабатываем изображение
-                result = process_image_task(image_path, request_id)
+                result = process_image_task(image_path, request_id, None)
                 results.append(result)
 
             except Exception as e:

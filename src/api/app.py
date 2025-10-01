@@ -369,6 +369,36 @@ async def get_latest_results(limit: int = 10):
         raise HTTPException(status_code=500, detail=f"Ошибка получения результатов: {str(e)}")
 
 
+@app.get("/results/photo/{photo_id}")
+async def get_photo_results(photo_id: int):
+    """Получение результатов обработки для конкретного фото"""
+    try:
+        db = SessionLocal()
+        query = text(
+            """
+            SELECT id, photo_id, image_path, task_id, request_id, coordinates, address, 
+                   ocr_result, buildings, processed_at, error
+            FROM processing_results
+            WHERE photo_id = :photo_id
+            ORDER BY processed_at DESC
+            LIMIT 1
+        """
+        )
+
+        result = db.execute(query, {"photo_id": photo_id})
+        row = result.fetchone()
+        db.close()
+
+        if row:
+            return dict(row)
+        else:
+            raise HTTPException(status_code=404, detail="Результаты обработки для этого фото не найдены")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка получения результатов: {str(e)}")
+
+
 @app.post("/search/by_coordinates", response_model=List[SearchResult])
 async def search_by_coordinates(request: SearchByCoordinatesRequest):
     """Поиск изображений по координатам"""

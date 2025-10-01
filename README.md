@@ -118,7 +118,6 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/building_detector
 ├── full-stack/                 # Микросервисы приложения
 │   ├── AuthService/           # Сервис аутентификации
 │   ├── DB/                    # Конфигурация базы данных
-│   ├── FastAPI/               # Базовый API сервис
 │   ├── PhotoUploadService/    # Сервис загрузки фотографий
 │   ├── ngnix/                 # Веб-сервер и фронтенд
 │   └── docker-compose.yml     # Конфигурация Docker Compose

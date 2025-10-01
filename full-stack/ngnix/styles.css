@@ -363,6 +363,35 @@ body {
 	width: 100%;
 }
 
+.photo-status {
+	margin: 5px 0 0;
+	font-size: 12px;
+	text-align: center;
+	width: 100%;
+	padding: 2px 4px;
+	border-radius: 4px;
+}
+
+.photo-status.success {
+	background-color: rgba(34, 197, 94, 0.15);
+	color: #22c55e;
+}
+
+.photo-status.error {
+	background-color: rgba(239, 68, 68, 0.15);
+	color: #ef4444;
+}
+
+.photo-status.processing {
+	background-color: rgba(59, 130, 246, 0.15);
+	color: #3b82f6;
+}
+
+.photo-status.unknown {
+	background-color: rgba(156, 163, 175, 0.15);
+	color: #94a3b8;
+}
+
 .upload-card {
 	cursor: pointer;
 	transition: transform 120ms ease, box-shadow 120ms ease;
@@ -446,6 +475,28 @@ body {
 	color: #ccc;
 	padding: 10px 0;
 	height: 150px;
+}
+
+.modal-error {
+	color: #ef4444;
+	font-weight: bold;
+}
+
+.modal-coordinates {
+	color: #22c55e;
+}
+
+.modal-address {
+	color: #3b82f6;
+}
+
+.modal-processed {
+	color: #94a3b8;
+}
+
+.modal-info {
+	color: #94a3b8;
+	font-style: italic;
 }
 
 @media (max-width: 768px) {
