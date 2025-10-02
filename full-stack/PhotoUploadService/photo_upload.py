@@ -8,23 +8,27 @@ from botocore.exceptions import ClientError
 from typing import List, Optional
 import logging
 import requests
+import zipfile
+import tempfile
+import shutil
+from pathlib import Path
 
-# Configure logging
+# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# Environment variables
+# Переменные окружения
 DATABASE_URL = os.getenv("DATABASE_URL")
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_ENDPOINT_URL = os.getenv("AWS_ENDPOINT_URL")
 S3_BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
-# API endpoint for image processing
+# URL API для обработки изображений
 IMAGE_PROCESSING_API_URL = os.getenv("IMAGE_PROCESSING_API_URL", "http://fastapi:8000")
 
-# Initialize S3 client
+# Инициализация клиента S3
 s3_client = boto3.client(
     "s3",
     aws_access_key_id=AWS_ACCESS_KEY_ID,
@@ -35,74 +39,106 @@ s3_client = boto3.client(
 
 def trigger_image_processing(image_path: str, owner_id: int, request_id: Optional[str] = None, photo_id: Optional[int] = None) -> bool:
     """
-    Trigger image processing by calling the image processing API
+    Запуск обработки изображения путем вызова API обработки изображений
     
-    Args:
-        image_path: Path to the image in S3
-        request_id: Optional request ID for tracking
-        photo_id: Optional photo ID for linking results
+    Параметры
+    ----------
+    image_path : str
+        Путь к изображению в S3
+    owner_id : int
+        Идентификатор владельца изображения
+    request_id : Optional[str], optional
+        Опциональный ID запроса для отслеживания, по умолчанию None
+    photo_id : Optional[int], optional
+        Опциональный ID фото для связи результатов, по умолчанию None
         
-    Returns:
-        True if processing was triggered successfully, False otherwise
+    Возвращает
+    -------
+    bool
+        True если обработка была успешно запущена, False в противном случае
     """
     try:
-        # Prepare the request payload
+        # Подготовка полезной нагрузки запроса
         payload = {
             "owner_id": owner_id,
             "image_path": image_path,
         }
         
+        # Добавляем request_id если он предоставлен
         if request_id:
             payload["request_id"] = request_id
             
+        # Добавляем photo_id если он предоставлен
         if photo_id:
             payload["photo_id"] = str(photo_id)
             
-        # Call the image processing API
+        # Вызов API обработки изображений
         response = requests.post(
             f"{IMAGE_PROCESSING_API_URL}/process_image_async",
             json=payload,
             timeout=30
         )
         
-        # Check if the request was successful
+        # Проверка успешности запроса
         if response.status_code == 200:
-            logger.info(f"Successfully triggered image processing for {image_path}")
+            logger.info(f"Успешно запущена обработка изображения для {image_path}")
             return True
         else:
-            logger.error(f"Failed to trigger image processing for {image_path}. Status code: {response.status_code}")
+            logger.error(f"Не удалось запустить обработку изображения для {image_path}. Код состояния: {response.status_code}")
             return False
             
     except requests.RequestException as e:
-        logger.error(f"Error triggering image processing for {image_path}: {e}")
+        logger.error(f"Ошибка при запуске обработки изображения для {image_path}: {e}")
         return False
     except Exception as e:
-        logger.error(f"Unexpected error triggering image processing for {image_path}: {e}")
+        logger.error(f"Неожиданная ошибка при запуске обработки изображения для {image_path}: {e}")
         return False
 
 class PhotoResponse(BaseModel):
+    """Модель ответа с информацией о фото"""
     id: int
     owner_id: int
     photo_url: str
     created_at: str
 
 class UserPhotosResponse(BaseModel):
+    """Модель ответа со списком фото пользователя"""
     photos: List[PhotoResponse]
 
 def check_single_quote(*args):
     """
-    Check if any of the arguments contain single quotes
+    Проверка наличия одинарных кавычек в аргументах для предотвращения SQL-инъекций
+    
+    Параметры
+    ----------
+    *args : tuple
+        Аргументы для проверки
     """
     for arg in args:
         if isinstance(arg, str) and "'" in arg:
-            raise HTTPException(status_code=400, detail="Invalid input: contains single quote")
+            raise HTTPException(status_code=400, detail="Недопустимый ввод: содержит одинарную кавычку")
 
 def get_user_id_from_session(session_token: str) -> int:
     """
-    Get user ID from session token
+    Получение ID пользователя по токену сессии
+    
+    Параметры
+    ----------
+    session_token : str
+        Токен сессии пользователя
+        
+    Возвращает
+    -------
+    int
+        ID пользователя
+        
+    Выбрасывает
+    ------
+    HTTPException
+        Если токен сессии отсутствует или недействителен
     """
     if not session_token:
-        raise HTTPException(status_code=401, detail="No session token provided")
+        raise HTTPException(status_code=401, detail="Токен сессии не предоставлен")
     
     check_single_quote(session_token)
     
@@ -115,15 +151,16 @@ def get_user_id_from_session(session_token: str) -> int:
         conn.close()
         
         if user:
-            return user[0]  # Return user ID
+            return user[0]  # Возвращаем ID пользователя
         else:
-            raise HTTPException(status_code=401, detail="Invalid session token")
+            raise HTTPException(status_code=401, detail="Недействительный токен сессии")
     except psycopg2.Error as e:
-        logger.error(f"Database error: {e}")
-        raise HTTPException(status_code=500, detail="Database error")
+        logger.error(f"Ошибка базы данных: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка базы данных")
 
 @app.get("/")
 def health():
+    """Проверка состояния сервиса"""
     return {"Status": "ok"}
 
 @app.post("/api/photo_upload")
@@ -132,21 +169,33 @@ async def upload_photo(
     session_token: str = Cookie(None)
 ):
     """
-    Upload a photo file to S3 and save metadata to database
+    Загрузка фото в S3 и сохранение метаданных в базу данных
+    
+    Параметры
+    ----------
+    file : UploadFile
+        Файл изображения для загрузки
+    session_token : str, optional
+        Токен сессии пользователя из cookie
+        
+    Возвращает
+    -------
+    dict
+        Информация о загруженном фото
     """
-    # Authenticate user
+    # Аутентификация пользователя
     owner_id = get_user_id_from_session(session_token)
     
-    # Validate file
+    # Проверка файла
     if not file:
-        raise HTTPException(status_code=400, detail="No file provided")
+        raise HTTPException(status_code=400, detail="Файл не предоставлен")
     
-    # Generate unique filename
+    # Генерация уникального имени файла
     file_extension = file.filename.split('.')[-1] if file.filename and '.' in file.filename else ''
     unique_filename = f"{uuid.uuid4()}.{file_extension}"
     
     try:
-        # Upload file to S3
+        # Загрузка файла в S3
         s3_client.upload_fileobj(
             file.file,
             S3_BUCKET_NAME,
@@ -154,10 +203,10 @@ async def upload_photo(
             ExtraArgs={'ContentType': file.content_type or 'application/octet-stream'}
         )
         
-        # Generate S3 URL
+        # Генерация URL файла в S3
         photo_url = unique_filename
         
-        # Save metadata to database
+        # Сохранение метаданных в базу данных
         conn = psycopg2.connect(DATABASE_URL)
         cur = conn.cursor()
         
@@ -168,7 +217,7 @@ async def upload_photo(
         
         result = cur.fetchone()
         if result is None:
-            raise HTTPException(status_code=500, detail="Failed to insert photo into database")
+            raise HTTPException(status_code=500, detail="Не удалось вставить фото в базу данных")
         photo_id = result[0]
         created_at = result[1]
         
@@ -176,7 +225,7 @@ async def upload_photo(
         cur.close()
         conn.close()
         
-        # Trigger image processing
+        # Запуск обработки изображения
         processing_triggered = trigger_image_processing(photo_url, owner_id, str(photo_id), photo_id)
         
         return {
@@ -187,25 +236,35 @@ async def upload_photo(
         }
         
     except ClientError as e:
-        logger.error(f"S3 upload error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to upload file to S3")
+        logger.error(f"Ошибка загрузки в S3: {e}")
+        raise HTTPException(status_code=500, detail="Не удалось загрузить файл в S3")
     except psycopg2.Error as e:
-        logger.error(f"Database error: {e}")
-        raise HTTPException(status_code=500, detail="Database error")
+        logger.error(f"Ошибка базы данных: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка базы данных")
     except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Неожиданная ошибка: {e}")
+        raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
 @app.get("/api/photos", response_model=UserPhotosResponse)
 def get_user_photos(session_token: str = Cookie(None)):
     """
-    Fetch all photos for the authenticated user
+    Получение всех фотографий аутентифицированного пользователя
+    
+    Параметры
+    ----------
+    session_token : str, optional
+        Токен сессии пользователя из cookie
+        
+    Возвращает
+    -------
+    UserPhotosResponse
+        Список фотографий пользователя
     """
-    # Authenticate user
+    # Аутентификация пользователя
     owner_id = get_user_id_from_session(session_token)
     
     try:
-        # Fetch photos from database
+        # Получение фотографий из базы данных
         conn = psycopg2.connect(DATABASE_URL)
         cur = conn.cursor()
         
@@ -218,7 +277,7 @@ def get_user_photos(session_token: str = Cookie(None)):
         cur.close()
         conn.close()
         
-        # Format response
+        # Формирование ответа
         photos = []
         for row in rows:
             photos.append({
@@ -231,8 +290,142 @@ def get_user_photos(session_token: str = Cookie(None)):
         return {"photos": photos}
         
     except psycopg2.Error as e:
-        logger.error(f"Database error: {e}")
-        raise HTTPException(status_code=500, detail="Database error")
+        logger.error(f"Ошибка базы данных: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка базы данных")
     except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Неожиданная ошибка: {e}")
+        raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
+
+
+@app.post("/api/zip_upload")
+async def upload_zip(
+    file: UploadFile = File(...),
+    session_token: str = Cookie(None)
+):
+    """
+    Загрузка ZIP-файла с фотографиями в S3 и сохранение метаданных в базу данных
+    
+    Параметры
+    ----------
+    file : UploadFile
+        ZIP-файл с изображениями для загрузки
+    session_token : str, optional
+        Токен сессии пользователя из cookie
+        
+    Возвращает
+    -------
+    dict
+        Информация о загруженных файлах и результатах обработки
+        
+    Выбрасывает
+    ------
+    HTTPException
+        При ошибке загрузки, обработки или некорректном формате файла
+    """
+    # Аутентификация пользователя
+    owner_id = get_user_id_from_session(session_token)
+    
+    # Проверка файла
+    if not file:
+        raise HTTPException(status_code=400, detail="Файл не предоставлен")
+    
+    # Проверка, что файл является ZIP-архивом
+    if not file.filename.endswith('.zip'):
+        raise HTTPException(status_code=400, detail="Разрешены только ZIP-файлы")
+    
+    try:
+        # Создание временной директории для распаковки
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Временное сохранение загруженного ZIP-файла
+            zip_path = temp_path / file.filename
+            with open(zip_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            
+            # Распаковка ZIP-файла
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(temp_path)
+            
+            # Обработка распакованных файлов
+            processed_files = []
+            failed_files = []
+            
+            # Поддерживаемые расширения изображений
+            image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
+            
+            # Итерация по распакованным файлам
+            for root, dirs, files in os.walk(temp_path):
+                for filename in files:
+                    file_path = Path(root) / filename
+                    extension = file_path.suffix.lower()
+                    
+                    # Обрабатываем только файлы изображений
+                    if extension in image_extensions:
+                        try:
+                            # Генерация уникального имени файла
+                            unique_filename = f"{uuid.uuid4()}{extension}"
+                            
+                            # Загрузка файла в S3
+                            with open(file_path, 'rb') as img_file:
+                                s3_client.upload_fileobj(
+                                    img_file,
+                                    S3_BUCKET_NAME,
+                                    unique_filename,
+                                    ExtraArgs={'ContentType': f'image/{extension[1:]}'}
+                                )
+                            
+                            # Сохранение метаданных в базу данных
+                            conn = psycopg2.connect(DATABASE_URL)
+                            cur = conn.cursor()
+                            
+                            cur.execute(
+                                "INSERT INTO user_photos (owner_id, photo_url) VALUES (%s, %s) RETURNING id, created_at",
+                                (owner_id, unique_filename)
+                            )
+                            
+                            result = cur.fetchone()
+                            if result is None:
+                                raise HTTPException(status_code=500, detail="Не удалось вставить фото в базу данных")
+                            photo_id = result[0]
+                            created_at = result[1]
+                            
+                            conn.commit()
+                            cur.close()
+                            conn.close()
+                            
+                            # Запуск обработки изображения
+                            processing_triggered = trigger_image_processing(unique_filename, owner_id, str(photo_id), photo_id)
+                            
+                            processed_files.append({
+                                "filename": filename,
+                                "id": photo_id,
+                                "photo_url": unique_filename,
+                                "created_at": created_at.isoformat() if hasattr(created_at, 'isoformat') else str(created_at),
+                                "processing_triggered": processing_triggered
+                            })
+                            
+                        except Exception as e:
+                            logger.error(f"Ошибка обработки файла {filename}: {e}")
+                            failed_files.append({
+                                "filename": filename,
+                                "error": str(e)
+                            })
+            
+            return {
+                "message": f"ZIP-файл обработан. Успешно загружено {len(processed_files)} файлов, {len(failed_files)} файлов не удалось обработать.",
+                "processed_files": processed_files,
+                "failed_files": failed_files
+            }
+            
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=400, detail="Некорректный ZIP-файл")
+    except ClientError as e:
+        logger.error(f"Ошибка загрузки в S3: {e}")
+        raise HTTPException(status_code=500, detail="Не удалось загрузить файлы в S3")
+    except psycopg2.Error as e:
+        logger.error(f"Ошибка базы данных: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка базы данных")
+    except Exception as e:
+        logger.error(f"Неожиданная ошибка: {e}")
+        raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")

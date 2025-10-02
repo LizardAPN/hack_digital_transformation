@@ -65,13 +65,13 @@ cv_model: Optional[CVModel] = None
 def get_cv_model():
     """
     Получение глобального экземпляра CV модели
-
-    Returns
+    
+    Возвращает
     -------
     CVModel
         Экземпляр CV модели
-
-    Examples
+        
+    Примеры
     --------
     >>> model = get_cv_model()
     >>> result = model.process_image("path/to/image.jpg")
@@ -86,20 +86,24 @@ def get_cv_model():
 def process_image_task(self, owner_id: int, image_path: str, request_id: str = None, photo_id: int = None) -> dict:
     """
     Асинхронная задача для обработки изображения
-
-    Parameters
+    
+    Параметры
     ----------
+    owner_id : int
+        Идентификатор владельца изображения
     image_path : str
         Путь к изображению
     request_id : str, optional
         Идентификатор запроса (для отслеживания) (по умолчанию None)
-
-    Returns
+    photo_id : int, optional
+        Идентификатор фото в базе данных (по умолчанию None)
+        
+    Возвращает
     -------
     dict
         Результат обработки изображения
-
-    Examples
+        
+    Примеры
     --------
     >>> result = process_image_task("path/to/image.jpg", "req_123")
     >>> print(result["task_id"])
@@ -115,6 +119,7 @@ def process_image_task(self, owner_id: int, image_path: str, request_id: str = N
         # Добавляем информацию о задаче
         result["task_id"] = self.request.id
         result["request_id"] = request_id
+        result["photo_id"] = photo_id
         result["processed_at"] = datetime.now().isoformat()
 
         # Сохраняем результат в базу данных
@@ -130,6 +135,7 @@ def process_image_task(self, owner_id: int, image_path: str, request_id: str = N
             "image_path": image_path,
             "task_id": self.request.id,
             "request_id": request_id,
+            "photo_id": photo_id,
             "error": str(e),
             "processed_at": datetime.now().isoformat(),
         }
@@ -138,19 +144,21 @@ def process_image_task(self, owner_id: int, image_path: str, request_id: str = N
         raise
 
 
-def save_result_to_db(result: dict, owner_id):
+def save_result_to_db(result: dict, owner_id: int):
     """
     Сохранение результата обработки в базу данных
-
-    Parameters
+    
+    Параметры
     ----------
     result : dict
         Результат обработки изображения
-
-    Examples
+    owner_id : int
+        Идентификатор владельца изображения
+        
+    Примеры
     --------
     >>> result = {"image_path": "path/to/image.jpg", "task_id": "task_123"}
-    >>> save_result_to_db(result)
+    >>> save_result_to_db(result, 1)
     """
     try:
         db = SessionLocal()
@@ -248,20 +256,20 @@ def save_result_to_db(result: dict, owner_id):
 def batch_process_images_task(self, image_paths: list, request_id: str = None) -> dict:
     """
     Асинхронная задача для пакетной обработки изображений
-
-    Parameters
+    
+    Параметры
     ----------
     image_paths : list
         Список путей к изображениям
     request_id : str, optional
         Идентификатор запроса (для отслеживания) (по умолчанию None)
-
-    Returns
+        
+    Возвращает
     -------
     dict
         Сводный результат обработки
-
-    Examples
+        
+    Примеры
     --------
     >>> image_paths = ["path/to/image1.jpg", "path/to/image2.jpg"]
     >>> result = batch_process_images_task(image_paths, "req_456")
@@ -279,8 +287,11 @@ def batch_process_images_task(self, image_paths: list, request_id: str = None) -
                 # Обновляем прогресс задачи
                 self.update_state(state="PROGRESS", meta={"current": i, "total": len(image_paths)})
 
-                # Обрабатываем изображение
-                result = process_image_task(image_path, request_id, None)
+                # Создаем подзадачу для обработки изображения
+                # Важно: используем delay() для создания подзадачи, а не прямой вызов функции
+                subtask = process_image_task.delay(0, image_path, request_id)  # owner_id установлен в 0 по умолчанию
+                # Ждем завершения подзадачи
+                result = subtask.get()
                 results.append(result)
 
             except Exception as e:

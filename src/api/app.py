@@ -195,13 +195,29 @@ def load_model_and_config():
 
 def get_user_id_from_session(session_token: str) -> int:
     """
-    Get user ID from session token
+    Получение ID пользователя по токену сессии
+    
+    Параметры
+    ----------
+    session_token : str
+        Токен сессии пользователя
+        
+    Возвращает
+    -------
+    int
+        ID пользователя
+        
+    Выбрасывает
+    ------
+    HTTPException
+        Если токен сессии отсутствует или недействителен
     """
     if not session_token:
-        raise HTTPException(status_code=401, detail="No session token provided")
+        raise HTTPException(status_code=401, detail="Токен сессии не предоставлен")
     
     try:
         db = SessionLocal()
+        # Запрос к базе данных для получения ID пользователя по токену сессии
         query = text("""
             SELECT id
             FROM users
@@ -213,9 +229,9 @@ def get_user_id_from_session(session_token: str) -> int:
         db.close()
 
         if row:
-            return row[0]  # Return user ID
+            return row[0]  # Возвращаем ID пользователя
         else:
-            raise HTTPException(status_code=401, detail="Invalid session token")
+            raise HTTPException(status_code=401, detail="Недействительный токен сессии")
     except HTTPException:
         raise
     except Exception as e:
@@ -259,7 +275,7 @@ async def process_image(request: ImageProcessRequest):
         raise HTTPException(status_code=500, detail="CV модель не загружена")
 
     try:
-        # Обработка изображения
+        # Обработка изображения с помощью CV модели
         result = cv_model.process_image(request.image_path)
 
         # Преобразование результата в формат ответа
@@ -302,7 +318,7 @@ async def process_image_async(request: AsyncImageProcessRequest):
     try:
         # Используем request_id если предоставлен, иначе None
         request_id = request.request_id
-        # Отправляем задачу в Celery
+        # Отправляем задачу в Celery для асинхронной обработки
         task = process_image_task.delay(request.owner_id, request.image_path, request_id)
 
         return AsyncTaskResponse(
@@ -319,7 +335,7 @@ async def process_images_batch(request: BatchImageProcessRequest):
         # Используем request_id если предоставлен, иначе None
         request_id = request.request_id
 
-        # Отправляем задачу в Celery
+        # Отправляем задачу в Celery для пакетной обработки
         task = batch_process_images_task.delay(request.image_paths, request_id)
 
         return AsyncTaskResponse(
@@ -366,6 +382,7 @@ async def get_tasks_by_request_id(request_id: str):
     """Получение всех задач по request_id"""
     try:
         db = SessionLocal()
+        # Запрос к базе данных для получения всех задач по request_id
         query = text(
             """
             SELECT task_id, status, progress, total, created_at, updated_at
@@ -389,6 +406,7 @@ async def get_latest_results(limit: int = 10):
     """Получение последних результатов обработки"""
     try:
         db = SessionLocal()
+        # Запрос к базе данных для получения последних результатов обработки
         query = text(
             """
             SELECT id, image_path, task_id, request_id, coordinates, address, 
@@ -413,6 +431,7 @@ async def get_photo_results(photo_id: str):
     """Получение результатов обработки для конкретного фото"""
     try:
         db = SessionLocal()
+        # Запрос к базе данных для получения результатов обработки для конкретного фото
         query = text(
             """
             SELECT id, image_path, task_id, request_id, coordinates, address, 
@@ -429,9 +448,9 @@ async def get_photo_results(photo_id: str):
         db.close()
         
         if row:
-            # Convert row to dictionary and handle datetime serialization
+            # Преобразуем строку результата в словарь и сериализуем дату
             row_dict = list(row)
-            # Convert datetime objects to ISO format strings
+            # Преобразуем объекты datetime в строки формата ISO
             for index in range(0, len(row_dict)):
                 if hasattr(row_dict[index], 'isoformat'):
                     row_dict[index] = row_dict[index].isoformat()
@@ -455,7 +474,7 @@ async def search_by_coordinates(request: SearchByCoordinatesRequest):
         radius_km = request.radius_km or 1.0
         
         # Запрос к базе данных для поиска изображений в радиусе заданных координат
-        # Используем приближенную формулу для расчета расстояния между точками
+        # Используем приближенную формулу для расчета расстояния между точками на сфере (haversine formula)
         query = text("""
             SELECT id, image_path, coordinates, address, processed_at,
                    (6371 * acos(cos(radians(:lat)) * cos(radians((coordinates->>'lat')::float)) 
