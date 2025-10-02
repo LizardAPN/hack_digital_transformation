@@ -62,7 +62,7 @@ class FeatureExtractor:
             except Exception as e2:
                 print(f"Ошибка загрузки модели без весов: {e2}")
                 raise RuntimeError("Не удалось загрузить модель ResNet50")
-        
+
         self.model = nn.Sequential(*list(self.model.children())[:-1])
         self.model.eval()
         self.model.to(self.device)

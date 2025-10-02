@@ -192,7 +192,7 @@ class OverlayOCR:
           final, norm, joined, conf, best_roi_name
         """
         # Преобразуем PIL Image в numpy array, если необходимо
-        if hasattr(image, 'convert'):
+        if hasattr(image, "convert"):
             # Это PIL Image, конвертируем в RGB если нужно, затем в numpy array
             if image.mode != "RGB":
                 image = image.convert("RGB")

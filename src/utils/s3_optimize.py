@@ -83,7 +83,7 @@ class S3Manager:
         access_key : str, optional
             Секретный ключ доступа к S3. Если не указан, берется из переменной окружения AWS_SECRET_ACCESS_KEY.
         endpoint_url : str, optional
-            URL конечной точки S3. Если не указан, берется из переменной окружения AWS_ENDPOINT_URL 
+            URL конечной точки S3. Если не указан, берется из переменной окружения AWS_ENDPOINT_URL
             или используется значение по умолчанию "https://s3-msk.tinkoff.ru".
         bucket_name : str, optional
             Имя бакета S3. Если не указан, берется из переменной окружения AWS_BUCKET_NAME.
@@ -91,7 +91,7 @@ class S3Manager:
             Максимальное количество рабочих потоков для параллельных операций (по умолчанию 10).
         chunk_size : int, optional
             Размер части файла для multipart операций в байтах (по умолчанию 8MB).
-        
+
         Raises
         ------
         ValueError
@@ -325,35 +325,35 @@ class S3Manager:
         self, file_path: str, s3_key: str, remove_source: bool = False, metadata: Optional[Dict] = None
     ) -> bool:
         """
-        Параллельная загрузка файла с оптимизацией для больших файлов.
+                Параллельная загрузка файла с оптимизацией для больших файлов.
 
-        Загружает файл из локальной файловой системы в S3. Для больших файлов
-        использует multipart загрузку, для маленьких - стандартную загрузку.
-        При необходимости может удалить исходный файл после успешной загрузки.
+                Загружает файл из локальной файловой системы в S3. Для больших файлов
+                использует multipart загрузку, для маленьких - стандартную загрузку.
+                При необходимости может удалить исходный файл после успешной загрузки.
 
-        Parameters
-        ----------
-        file_path : str
-            Путь к локальному файлу для загрузки.
-        s3_key : str
-            Ключ объекта в S3, по которому будет сохранен файл.
-        remove_source : bool, optional
-            Флаг, указывающий на необходимость удаления исходного файла
-            после успешной загрузки (по умолчанию False).
-        metadata : dict, optional
-            Дополнительные метаданные для объекта (по умолчанию None).
+                Parameters
+                ----------
+                file_path : str
+                    Путь к локальному файлу для загрузки.
+                s3_key : str
+                    Ключ объекта в S3, по которому будет сохранен файл.
+                remove_source : bool, optional
+                    Флаг, указывающий на необходимость удаления исходного файла
+                    после успешной загрузки (по умолчанию False).
+                metadata : dict, optional
+                    Дополнительные метаданные для объекта (по умолчанию None).
 
-        Returns
-        -------
-        bool
-            True, если загрузка прошла успешно, иначе False.
+                Returns
+                -------
+                bool
+                    True, если загрузка прошла успешно, иначе False.
 
-        Examples
-        --------
-        >>> s3_manager = S3Manager()
-s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt", "path/in/s3/file.txt")
-        >>> print(success)
-        True
+                Examples
+                --------
+                >>> s3_manager = S3Manager()
+        s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt", "path/in/s3/file.txt")
+                >>> print(success)
+                True
         """
         try:
             file_size = os.path.getsize(file_path)
@@ -928,7 +928,7 @@ s        >>> success = s3_manager.upload_file_parallel("/path/to/local/file.txt"
         >>> image_files = s3_manager.list_files(prefix="images/")
         >>> # Получить только JPG и PNG файлы
         >>> image_files = s3_manager.list_files(
-        ...     prefix="images/", 
+        ...     prefix="images/",
         ...     file_extensions=[".jpg", ".png"]
         ... )
         """

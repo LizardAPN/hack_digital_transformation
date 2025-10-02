@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const uploadStatus = document.getElementById('upload-status');
     const addPhotoCard = document.getElementById('add-photo-card');
     
-    // Search elements
+    // Search elementsf
     const searchInput = document.getElementById('search-input');
     const searchButton = document.getElementById('search-button');
     const searchResults = document.getElementById('search-results');
@@ -291,9 +291,57 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Function to export data to XLSX
     function exportToXlsx() {
-        window.location.href = '/api/export/results/xlsx';
+        window.location.href = '/export/results/xlsx';
     }
     
     // Load photos when page loads
     loadPhotos();
+    
+    // Function to check for photo processing results every second
+    function checkPhotoStatus() {
+        // Find all photo cards with unknown status
+        const unknownStatusPhotos = document.querySelectorAll('.photo-status.unknown');
+        
+        unknownStatusPhotos.forEach(photoStatusElement => {
+            // Get the parent photo card
+            const photoCard = photoStatusElement.closest('.photo-card');
+            if (!photoCard) return;
+            
+            // Get the photo URL from the image element
+            const imgElement = photoCard.querySelector('.photo-thumbnail');
+            if (!imgElement) return;
+            
+            const photoUrl = imgElement.src;
+            if (!photoUrl) return;
+            
+            // Extract photo ID from URL (assuming format: .../photo_id.jpg)
+            const urlParts = photoUrl.split('/');
+            const photoId = urlParts[urlParts.length - 1];
+            
+            // Send request to check photo processing status
+            fetch(`http://localhost/results/photo/${photoId}`)
+                .then(response => {
+                    if (response.ok) {
+                        return response.json();
+                    } else {
+                        throw new Error('Failed to fetch photo status');
+                    }
+                })
+                .then(data => {
+                    // Check if we have coordinates in the response
+                    if (data && data[4] && data[4].lat !== undefined && data[4].lon !== undefined) {
+                        const coords = data[4];
+                        // Update the status element with coordinates
+                        photoStatusElement.textContent = `Координаты: ${coords.lat.toFixed(6)}, ${coords.lon.toFixed(6)}`;
+                        photoStatusElement.className = 'photo-status success';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking photo status:', error);
+                });
+        });
+    }
+    
+    // Run the checkPhotoStatus function every second
+    setInterval(checkPhotoStatus, 1000);
 });

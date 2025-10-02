@@ -252,6 +252,13 @@ body {
 	background: #0c1427;
 }
 
+.logout-container {
+	flex-grow: 1;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+}
+
 .main-content {
 	flex: 1;
 	display: flex;

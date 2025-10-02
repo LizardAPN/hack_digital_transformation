@@ -29,8 +29,8 @@ def extract_zip_advanced(zip_path: str, extract_to: str, remove_after_extract: b
     """
     Разархивирует ZIP файл с обработкой ошибок и опцией удаления архива.
 
-    Функция извлекает содержимое ZIP архива в указанную директорию с полной 
-    обработкой ошибок. Поддерживает проверку целостности архива и опциональное 
+    Функция извлекает содержимое ZIP архива в указанную директорию с полной
+    обработкой ошибок. Поддерживает проверку целостности архива и опциональное
     удаление исходного архива после успешного извлечения.
 
     Parameters
@@ -40,7 +40,7 @@ def extract_zip_advanced(zip_path: str, extract_to: str, remove_after_extract: b
     extract_to : str
         Директория, в которую будет извлечено содержимое архива.
     remove_after_extract : bool, optional
-        Флаг, указывающий на необходимость удаления архива после 
+        Флаг, указывающий на необходимость удаления архива после
         успешного извлечения (по умолчанию False).
 
     Returns
@@ -62,11 +62,11 @@ def extract_zip_advanced(zip_path: str, extract_to: str, remove_after_extract: b
     >>> file_list = extract_zip_advanced("archive.zip", "extracted_files")
     >>> if file_list is not None:
     ...     print(f"Извлечено {len(file_list)} файлов")
-    >>> 
+    >>>
     >>> # С удалением архива после извлечения
     >>> file_list = extract_zip_advanced(
-    ...     "archive.zip", 
-    ...     "extracted_files", 
+    ...     "archive.zip",
+    ...     "extracted_files",
     ...     remove_after_extract=True
     ... )
     """
