@@ -61,3 +61,6 @@ data/*
 hack_digital_transformation/
 uv.lock
 .coverage
+
+# Базы данных 
+/full-stack/DB/init/*
