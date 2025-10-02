@@ -66,12 +66,12 @@ def get_cv_model():
     """
     Получение глобального экземпляра CV модели
 
-    Returns
+    Возвращает
     -------
     CVModel
         Экземпляр CV модели
 
-    Examples
+    Примеры
     --------
     >>> model = get_cv_model()
     >>> result = model.process_image("path/to/image.jpg")
@@ -83,30 +83,33 @@ def get_cv_model():
 
 
 @celery_app.task(bind=True)
-def process_image_task(self, image_path: str, request_id: str = None, photo_id: int = None) -> dict:
+def process_image_task(self, owner_id: int, image_path: str, request_id: str = None, photo_id: int = None) -> dict:
     """
     Асинхронная задача для обработки изображения
 
-    Parameters
+    Параметры
     ----------
+    owner_id : int
+        Идентификатор владельца изображения
     image_path : str
         Путь к изображению
     request_id : str, optional
         Идентификатор запроса (для отслеживания) (по умолчанию None)
+    photo_id : int, optional
+        Идентификатор фото в базе данных (по умолчанию None)
 
-    Returns
+    Возвращает
     -------
     dict
         Результат обработки изображения
 
-    Examples
+    Примеры
     --------
     >>> result = process_image_task("path/to/image.jpg", "req_123")
     >>> print(result["task_id"])
     """
     try:
         logger.info(f"Начало обработки изображения: {image_path}")
-
         # Получаем модель CV
         model = get_cv_model()
 
@@ -116,10 +119,11 @@ def process_image_task(self, image_path: str, request_id: str = None, photo_id: 
         # Добавляем информацию о задаче
         result["task_id"] = self.request.id
         result["request_id"] = request_id
+        result["photo_id"] = photo_id
         result["processed_at"] = datetime.now().isoformat()
 
         # Сохраняем результат в базу данных
-        save_result_to_db(result)
+        save_result_to_db(result, owner_id)
 
         logger.info(f"Обработка изображения завершена: {image_path}")
         return result
@@ -131,26 +135,30 @@ def process_image_task(self, image_path: str, request_id: str = None, photo_id: 
             "image_path": image_path,
             "task_id": self.request.id,
             "request_id": request_id,
+            "photo_id": photo_id,
             "error": str(e),
             "processed_at": datetime.now().isoformat(),
         }
-        save_result_to_db(error_result)
+
+        save_result_to_db(error_result, owner_id)
         raise
 
 
-def save_result_to_db(result: dict):
+def save_result_to_db(result: dict, owner_id: int):
     """
     Сохранение результата обработки в базу данных
 
-    Parameters
+    Параметры
     ----------
     result : dict
         Результат обработки изображения
+    owner_id : int
+        Идентификатор владельца изображения
 
-    Examples
+    Примеры
     --------
     >>> result = {"image_path": "path/to/image.jpg", "task_id": "task_123"}
-    >>> save_result_to_db(result)
+    >>> save_result_to_db(result, 1)
     """
     try:
         db = SessionLocal()
@@ -166,43 +174,75 @@ def save_result_to_db(result: dict):
         buildings = result.get("buildings", [])
         processed_at = result.get("processed_at", "")
         error = result.get("error", "")
-
         # Преобразуем сложные объекты в JSON
         coordinates_json = json.dumps(coordinates) if coordinates else "{}"
         ocr_result_json = json.dumps(ocr_result) if ocr_result else "{}"
         buildings_json = json.dumps(buildings) if buildings else "[]"
 
         # Вставляем данные в таблицу
-        query = text(
+        try:
+            # Пытаемся вставить с owner_id (новая версия таблицы)
+            query = text(
+                """
+                INSERT INTO processing_results (
+                    image_path, task_id, request_id, coordinates, address,
+                    ocr_result, buildings, processed_at, error, owner_id
+                ) VALUES (
+                    :image_path, :task_id, :request_id, :coordinates, :address,
+                    :ocr_result, :buildings, :processed_at, :error, :owner_id
+                )
             """
-            INSERT INTO processing_results (
-                image_path, task_id, request_id, coordinates, address, 
-                ocr_result, buildings, processed_at, error
-            ) VALUES (
-                :image_path, :task_id, :request_id, :coordinates, :address,
-                :ocr_result, :buildings, :processed_at, :error
             )
-        """
-        )
 
-        db.execute(
-            query,
-            {
-                "image_path": image_path,
-                "task_id": task_id,
-                "request_id": request_id,
-                "coordinates": coordinates_json,
-                "address": address,
-                "ocr_result": ocr_result_json,
-                "buildings": buildings_json,
-                "processed_at": processed_at,
-                "error": error,
-            },
-        )
+            db.execute(
+                query,
+                {
+                    "image_path": image_path,
+                    "task_id": task_id,
+                    "request_id": request_id,
+                    "coordinates": coordinates_json,
+                    "address": address,
+                    "ocr_result": ocr_result_json,
+                    "buildings": buildings_json,
+                    "processed_at": processed_at,
+                    "error": error,
+                    "owner_id": owner_id,
+                },
+            )
+        except Exception as e:
+            # Если owner_id не существует, вставляем без него (старая версия таблицы)
+            logger.warning(f"owner_id column not found in processing_results table, inserting without it: {e}")
+            query = text(
+                """
+                INSERT INTO processing_results (
+                    image_path, task_id, request_id, coordinates, address,
+                    ocr_result, buildings, processed_at, error
+                ) VALUES (
+                    :image_path, :task_id, :request_id, :coordinates, :address,
+                    :ocr_result, :buildings, :processed_at, :error
+                )
+            """
+            )
+
+            db.execute(
+                query,
+                {
+                    "image_path": image_path,
+                    "task_id": task_id,
+                    "request_id": request_id,
+                    "coordinates": coordinates_json,
+                    "address": address,
+                    "ocr_result": ocr_result_json,
+                    "buildings": buildings_json,
+                    "processed_at": processed_at,
+                    "error": error,
+                },
+            )
 
         db.commit()
         db.close()
 
+        logger.info(f"owner_id {owner_id}")
         logger.info(f"Результат сохранен в БД для задачи {task_id}")
 
     except Exception as e:
@@ -217,19 +257,19 @@ def batch_process_images_task(self, image_paths: list, request_id: str = None) -
     """
     Асинхронная задача для пакетной обработки изображений
 
-    Parameters
+    Параметры
     ----------
     image_paths : list
         Список путей к изображениям
     request_id : str, optional
         Идентификатор запроса (для отслеживания) (по умолчанию None)
 
-    Returns
+    Возвращает
     -------
     dict
         Сводный результат обработки
 
-    Examples
+    Примеры
     --------
     >>> image_paths = ["path/to/image1.jpg", "path/to/image2.jpg"]
     >>> result = batch_process_images_task(image_paths, "req_456")
@@ -247,8 +287,11 @@ def batch_process_images_task(self, image_paths: list, request_id: str = None) -
                 # Обновляем прогресс задачи
                 self.update_state(state="PROGRESS", meta={"current": i, "total": len(image_paths)})
 
-                # Обрабатываем изображение
-                result = process_image_task(image_path, request_id, None)
+                # Создаем подзадачу для обработки изображения
+                # Важно: используем delay() для создания подзадачи, а не прямой вызов функции
+                subtask = process_image_task.delay(0, image_path, request_id)  # owner_id установлен в 0 по умолчанию
+                # Ждем завершения подзадачи
+                result = subtask.get()
                 results.append(result)
 
             except Exception as e:

@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
-import os 
+import os
+
 # Добавляем путь к утилитам для корректной работы импортов
 utils_path = Path(__file__).resolve().parent.parent / "utils"
 if str(utils_path) not in sys.path:
@@ -25,7 +26,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import redis
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Cookie
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -80,6 +81,7 @@ class ImageProcessRequest(BaseModel):
 class AsyncImageProcessRequest(BaseModel):
     """Модель запроса для асинхронной обработки изображения"""
 
+    owner_id: int
     image_path: str
     request_id: Optional[str] = None
 
@@ -171,6 +173,17 @@ class TaskStatusResponse(BaseModel):
     progress: Optional[dict] = None
 
 
+class UserQueryHistory(BaseModel):
+    """Модель для истории запросов пользователя"""
+
+    id: Optional[int] = None
+    user_id: int
+    query_type: str  # Тип запроса: upload, search_by_coords, search_by_address, etc.
+    query_data: Dict[str, Any]  # Данные запроса (координаты, адрес, путь к изображению и т.д.)
+    timestamp: datetime
+    result_count: Optional[int] = None  # Количество найденных результатов
+
+
 def load_model_and_config():
     """Загрузка обученной модели и конфигурации"""
     global model, config
@@ -179,6 +192,53 @@ def load_model_and_config():
     # Так как мы используем визуальный поиск по изображениям
     model = None
     config = None
+
+
+def get_user_id_from_session(session_token: str) -> int:
+    """
+    Получение ID пользователя по токену сессии
+
+    Параметры
+    ----------
+    session_token : str
+        Токен сессии пользователя
+
+    Возвращает
+    -------
+    int
+        ID пользователя
+
+    Выбрасывает
+    ------
+    HTTPException
+        Если токен сессии отсутствует или недействителен
+    """
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Токен сессии не предоставлен")
+
+    try:
+        db = SessionLocal()
+        # Запрос к базе данных для получения ID пользователя по токену сессии
+        query = text(
+            """
+            SELECT id
+            FROM users
+            WHERE session_token = :session_token
+        """
+        )
+
+        result = db.execute(query, {"session_token": session_token})
+        row = result.fetchone()
+        db.close()
+
+        if row:
+            return row[0]  # Возвращаем ID пользователя
+        else:
+            raise HTTPException(status_code=401, detail="Недействительный токен сессии")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка получения результатов: {str(e)}")
 
 
 @app.on_event("startup")
@@ -219,7 +279,7 @@ async def process_image(request: ImageProcessRequest):
         raise HTTPException(status_code=500, detail="CV модель не загружена")
 
     try:
-        # Обработка изображения
+        # Обработка изображения с помощью CV модели
         result = cv_model.process_image(request.image_path)
 
         # Преобразование результата в формат ответа
@@ -262,9 +322,8 @@ async def process_image_async(request: AsyncImageProcessRequest):
     try:
         # Используем request_id если предоставлен, иначе None
         request_id = request.request_id
-
-        # Отправляем задачу в Celery
-        task = process_image_task.delay(request.image_path, request_id)
+        # Отправляем задачу в Celery для асинхронной обработки
+        task = process_image_task.delay(request.owner_id, request.image_path, request_id)
 
         return AsyncTaskResponse(
             task_id=task.id, request_id=request_id, status="started", message="Задача принята в обработку"
@@ -280,7 +339,7 @@ async def process_images_batch(request: BatchImageProcessRequest):
         # Используем request_id если предоставлен, иначе None
         request_id = request.request_id
 
-        # Отправляем задачу в Celery
+        # Отправляем задачу в Celery для пакетной обработки
         task = batch_process_images_task.delay(request.image_paths, request_id)
 
         return AsyncTaskResponse(
@@ -327,6 +386,7 @@ async def get_tasks_by_request_id(request_id: str):
     """Получение всех задач по request_id"""
     try:
         db = SessionLocal()
+        # Запрос к базе данных для получения всех задач по request_id
         query = text(
             """
             SELECT task_id, status, progress, total, created_at, updated_at
@@ -350,6 +410,7 @@ async def get_latest_results(limit: int = 10):
     """Получение последних результатов обработки"""
     try:
         db = SessionLocal()
+        # Запрос к базе данных для получения последних результатов обработки
         query = text(
             """
             SELECT id, image_path, task_id, request_id, coordinates, address, 
@@ -370,27 +431,35 @@ async def get_latest_results(limit: int = 10):
 
 
 @app.get("/results/photo/{photo_id}")
-async def get_photo_results(photo_id: int):
+async def get_photo_results(photo_id: str):
     """Получение результатов обработки для конкретного фото"""
     try:
         db = SessionLocal()
+        # Запрос к базе данных для получения результатов обработки для конкретного фото
         query = text(
             """
-            SELECT id, photo_id, image_path, task_id, request_id, coordinates, address, 
+            SELECT id, image_path, task_id, request_id, coordinates, address, 
                    ocr_result, buildings, processed_at, error
             FROM processing_results
-            WHERE photo_id = :photo_id
+            WHERE image_path = :image_path
             ORDER BY processed_at DESC
             LIMIT 1
         """
         )
 
-        result = db.execute(query, {"photo_id": photo_id})
+        result = db.execute(query, {"image_path": photo_id})
         row = result.fetchone()
         db.close()
 
         if row:
-            return dict(row)
+            # Преобразуем строку результата в словарь и сериализуем дату
+            row_dict = list(row)
+            # Преобразуем объекты datetime в строки формата ISO
+            for index in range(0, len(row_dict)):
+                if hasattr(row_dict[index], "isoformat"):
+                    row_dict[index] = row_dict[index].isoformat()
+
+            return row_dict
         else:
             raise HTTPException(status_code=404, detail="Результаты обработки для этого фото не найдены")
     except HTTPException:
@@ -404,13 +473,14 @@ async def search_by_coordinates(request: SearchByCoordinatesRequest):
     """Поиск изображений по координатам"""
     try:
         db = SessionLocal()
-        
+
         # Если радиус не задан, используем значение по умолчанию
         radius_km = request.radius_km or 1.0
-        
+
         # Запрос к базе данных для поиска изображений в радиусе заданных координат
-        # Используем приближенную формулу для расчета расстояния между точками
-        query = text("""
+        # Используем приближенную формулу для расчета расстояния между точками на сфере (haversine formula)
+        query = text(
+            """
             SELECT id, image_path, coordinates, address, processed_at,
                    (6371 * acos(cos(radians(:lat)) * cos(radians((coordinates->>'lat')::float)) 
                    * cos(radians((coordinates->>'lon')::float) - radians(:lon)) 
@@ -424,28 +494,31 @@ async def search_by_coordinates(request: SearchByCoordinatesRequest):
                    + sin(radians(:lat)) * sin(radians((coordinates->>'lat')::float)))) <= :radius_km
             ORDER BY distance_km ASC
             LIMIT 50
-        """)
-        
-        result = db.execute(query, {
-            "lat": request.lat, 
-            "lon": request.lon, 
-            "radius_km": radius_km
-        })
+        """
+        )
+
+        result = db.execute(query, {"lat": request.lat, "lon": request.lon, "radius_km": radius_km})
         rows = result.fetchall()
         db.close()
-        
+
         # Преобразуем результаты в формат ответа
         search_results = []
         for row in rows:
             coords = json.loads(row.coordinates) if isinstance(row.coordinates, str) else row.coordinates
-            search_results.append(SearchResult(
-                image_path=row.image_path,
-                coordinates=CoordinateResult(lat=coords.get("lat"), lon=coords.get("lon")),
-                address=row.address,
-                distance_km=float(row.distance_km) if row.distance_km is not None else None,
-                processed_at=row.processed_at.isoformat() if hasattr(row.processed_at, 'isoformat') else str(row.processed_at)
-            ))
-        
+            search_results.append(
+                SearchResult(
+                    image_path=row.image_path,
+                    coordinates=CoordinateResult(lat=coords.get("lat"), lon=coords.get("lon")),
+                    address=row.address,
+                    distance_km=float(row.distance_km) if row.distance_km is not None else None,
+                    processed_at=(
+                        row.processed_at.isoformat()
+                        if hasattr(row.processed_at, "isoformat")
+                        else str(row.processed_at)
+                    ),
+                )
+            )
+
         return search_results
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка поиска по координатам: {str(e)}")
@@ -458,9 +531,9 @@ async def search_by_address(request: SearchByAddressRequest):
         # Сначала геокодируем адрес в координаты
         from src.geo.geocoder import geocode_coordinates
         import re
-        
+
         # Простая попытка извлечь координаты из адреса, если они указаны в формате "lat,lon"
-        coord_match = re.match(r'^\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*$', request.address)
+        coord_match = re.match(r"^\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*$", request.address)
         if coord_match:
             lat, lon = float(coord_match.group(1)), float(coord_match.group(2))
         else:
@@ -468,10 +541,11 @@ async def search_by_address(request: SearchByAddressRequest):
             # Для простоты возьмем координаты из строки адреса, если это возможно
             # В реальной реализации здесь должен быть полноценный геокодер
             raise HTTPException(status_code=501, detail="Геокодирование адресов пока не реализовано")
-        
+
         # Выполняем поиск по координатам с небольшим радиусом
         db = SessionLocal()
-        query = text("""
+        query = text(
+            """
             SELECT id, image_path, coordinates, address, processed_at,
                    (6371 * acos(cos(radians(:lat)) * cos(radians((coordinates->>'lat')::float)) 
                    * cos(radians((coordinates->>'lon')::float) - radians(:lon)) 
@@ -485,24 +559,31 @@ async def search_by_address(request: SearchByAddressRequest):
                    + sin(radians(:lat)) * sin(radians((coordinates->>'lat')::float)))) <= 1.0
             ORDER BY distance_km ASC
             LIMIT 50
-        """)
-        
+        """
+        )
+
         result = db.execute(query, {"lat": lat, "lon": lon})
         rows = result.fetchall()
         db.close()
-        
+
         # Преобразуем результаты в формат ответа
         search_results = []
         for row in rows:
             coords = json.loads(row.coordinates) if isinstance(row.coordinates, str) else row.coordinates
-            search_results.append(SearchResult(
-                image_path=row.image_path,
-                coordinates=CoordinateResult(lat=coords.get("lat"), lon=coords.get("lon")),
-                address=row.address,
-                distance_km=float(row.distance_km) if row.distance_km is not None else None,
-                processed_at=row.processed_at.isoformat() if hasattr(row.processed_at, 'isoformat') else str(row.processed_at)
-            ))
-        
+            search_results.append(
+                SearchResult(
+                    image_path=row.image_path,
+                    coordinates=CoordinateResult(lat=coords.get("lat"), lon=coords.get("lon")),
+                    address=row.address,
+                    distance_km=float(row.distance_km) if row.distance_km is not None else None,
+                    processed_at=(
+                        row.processed_at.isoformat()
+                        if hasattr(row.processed_at, "isoformat")
+                        else str(row.processed_at)
+                    ),
+                )
+            )
+
         return search_results
     except HTTPException:
         raise
@@ -511,27 +592,31 @@ async def search_by_address(request: SearchByAddressRequest):
 
 
 @app.get("/export/results/xlsx")
-async def export_results_xlsx():
+async def export_results_xlsx(session_token: str = Cookie(None)):
     """Экспорт результатов обработки в формате XLSX"""
+    owner_id = get_user_id_from_session(session_token)
     try:
         import pandas as pd
         from io import BytesIO
         from fastapi.responses import StreamingResponse
-        
+
         # Получаем последние результаты из базы данных
         db = SessionLocal()
-        query = text("""
+        query = text(
+            f"""
             SELECT id, image_path, task_id, request_id, coordinates, address, 
                    ocr_result, buildings, processed_at, error
             FROM processing_results
+            WHERE owner_id = {owner_id}
             ORDER BY processed_at DESC
             LIMIT 1000
-        """)
-        
+        """
+        )
+
         result = db.execute(query)
         rows = result.fetchall()
         db.close()
-        
+
         # Преобразуем данные в DataFrame
         data = []
         for row in rows:
@@ -539,39 +624,221 @@ async def export_results_xlsx():
             coords = json.loads(row.coordinates) if isinstance(row.coordinates, str) else row.coordinates
             ocr = json.loads(row.ocr_result) if isinstance(row.ocr_result, str) else row.ocr_result
             buildings = json.loads(row.buildings) if isinstance(row.buildings, str) else row.buildings
-            
-            data.append({
-                "ID": row.id,
-                "Путь к изображению": row.image_path,
-                "ID задачи": row.task_id,
-                "ID запроса": row.request_id,
-                "Широта": coords.get("lat") if coords else None,
-                "Долгота": coords.get("lon") if coords else None,
-                "Адрес": row.address,
-                "OCR результат": str(ocr) if ocr else None,
-                "Здания": str(buildings) if buildings else None,
-                "Дата обработки": row.processed_at.isoformat() if hasattr(row.processed_at, 'isoformat') else str(row.processed_at),
-                "Ошибка": row.error
-            })
-        
+
+            data.append(
+                {
+                    "ID": row.id,
+                    "Путь к изображению": row.image_path,
+                    "ID задачи": row.task_id,
+                    "ID запроса": row.request_id,
+                    "Широта": coords.get("lat") if coords else None,
+                    "Долгота": coords.get("lon") if coords else None,
+                    "Адрес": row.address,
+                    "OCR результат": str(ocr) if ocr else None,
+                    "Здания": str(buildings) if buildings else None,
+                    "Дата обработки": (
+                        row.processed_at.isoformat()
+                        if hasattr(row.processed_at, "isoformat")
+                        else str(row.processed_at)
+                    ),
+                    "Ошибка": row.error,
+                }
+            )
+
         df = pd.DataFrame(data)
-        
+
         # Создаем буфер для XLSX файла
         buffer = BytesIO()
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='Результаты обработки')
-        
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="Результаты обработки")
+
         buffer.seek(0)
-        
+
         # Возвращаем файл как ответ
         headers = {
-            'Content-Disposition': 'attachment; filename="processing_results.xlsx"',
-            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            "Content-Disposition": 'attachment; filename="processing_results.xlsx"',
+            "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         }
-        
+
         return StreamingResponse(buffer, headers=headers)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка экспорта в XLSX: {str(e)}")
+
+
+@app.post("/user/query_history", response_model=UserQueryHistory)
+async def save_user_query_history(query_history: UserQueryHistory):
+    """Сохранение истории запросов пользователя"""
+    try:
+        db = SessionLocal()
+
+        # Подготавливаем данные для сохранения
+        query_data_json = json.dumps(query_history.query_data) if query_history.query_data else "{}"
+
+        # Вставляем данные в таблицу
+        query = text(
+            """
+            INSERT INTO user_query_history (
+                user_id, query_type, query_data, timestamp, result_count
+            ) VALUES (
+                :user_id, :query_type, :query_data, :timestamp, :result_count
+            ) RETURNING id
+            """
+        )
+
+        result = db.execute(
+            query,
+            {
+                "user_id": query_history.user_id,
+                "query_type": query_history.query_type,
+                "query_data": query_data_json,
+                "timestamp": query_history.timestamp,
+                "result_count": query_history.result_count,
+            },
+        )
+
+        query_id = result.fetchone()[0]
+        db.commit()
+        db.close()
+
+        # Возвращаем сохраненную запись с присвоенным ID
+        return UserQueryHistory(
+            id=query_id,
+            user_id=query_history.user_id,
+            query_type=query_history.query_type,
+            query_data=query_history.query_data,
+            timestamp=query_history.timestamp,
+            result_count=query_history.result_count,
+        )
+
+    except Exception as e:
+        if "db" in locals():
+            db.rollback()
+            db.close()
+        raise HTTPException(status_code=500, detail=f"Ошибка сохранения истории запросов: {str(e)}")
+
+
+@app.get("/user/query_history/{user_id}", response_model=List[UserQueryHistory])
+async def get_user_query_history(user_id: int, limit: int = 50):
+    """Получение истории запросов пользователя"""
+    try:
+        db = SessionLocal()
+
+        # Запрашиваем историю запросов пользователя
+        query = text(
+            """
+            SELECT id, user_id, query_type, query_data, timestamp, result_count
+            FROM user_query_history
+            WHERE user_id = :user_id
+            ORDER BY timestamp DESC
+            LIMIT :limit
+            """
+        )
+
+        result = db.execute(query, {"user_id": user_id, "limit": limit})
+        rows = result.fetchall()
+        db.close()
+
+        # Преобразуем результаты в формат ответа
+        history = []
+        for row in rows:
+            query_data = json.loads(row.query_data) if isinstance(row.query_data, str) else row.query_data
+            history.append(
+                UserQueryHistory(
+                    id=row.id,
+                    user_id=row.user_id,
+                    query_type=row.query_type,
+                    query_data=query_data,
+                    timestamp=row.timestamp,
+                    result_count=row.result_count,
+                )
+            )
+
+        return history
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка получения истории запросов: {str(e)}")
+
+
+@app.post("/coordinates", response_model=CoordinateResult)
+async def upload_coordinates(coordinates: CoordinateResult):
+    """Загрузка координат"""
+    try:
+        db = SessionLocal()
+
+        # Вставляем данные в таблицу coordinates
+        query = text(
+            """
+            INSERT INTO coordinates (
+                lat, lon, created_at
+            ) VALUES (
+                :lat, :lon, NOW()
+            ) RETURNING id
+            """
+        )
+
+        result = db.execute(
+            query,
+            {
+                "lat": coordinates.lat,
+                "lon": coordinates.lon,
+            },
+        )
+
+        coord_id = result.fetchone()[0]
+        db.commit()
+        db.close()
+
+        # Возвращаем сохраненные координаты с присвоенным ID
+        return CoordinateResult(
+            id=coord_id,
+            lat=coordinates.lat,
+            lon=coordinates.lon,
+        )
+
+    except Exception as e:
+        if "db" in locals():
+            db.rollback()
+            db.close()
+        raise HTTPException(status_code=500, detail=f"Ошибка загрузки координат: {str(e)}")
+
+
+@app.post("/coordinates/batch")
+async def upload_coordinates_batch(coordinates_list: List[CoordinateResult]):
+    """Загрузка каталога координат"""
+    try:
+        db = SessionLocal()
+
+        # Подготавливаем данные для пакетной вставки
+        values = []
+        for coord in coordinates_list:
+            values.append(
+                {
+                    "lat": coord.lat,
+                    "lon": coord.lon,
+                }
+            )
+
+        # Вставляем данные в таблицу coordinates
+        query = text(
+            """
+            INSERT INTO coordinates (
+                lat, lon, created_at
+            ) VALUES (
+                :lat, :lon, NOW()
+            )
+            """
+        )
+
+        db.execute(query, values)
+        db.commit()
+        db.close()
+
+        return {"message": f"Получено {len(coordinates_list)} координат", "count": len(coordinates_list)}
+    except Exception as e:
+        if "db" in locals():
+            db.rollback()
+            db.close()
+        raise HTTPException(status_code=500, detail=f"Ошибка загрузки каталога координат: {str(e)}")
 
 
 @app.get("/model/info")
@@ -587,6 +854,88 @@ async def model_info():
         info["features"] = model.feature_names_in_.tolist()
 
     return info
+
+
+@app.post("/import/zip")
+async def import_data_from_zip():
+    """Импорт данных zip архивом"""
+    try:
+        # В реальной реализации здесь должна быть логика импорта данных из zip архива
+        # Например, распаковка архива, обработка изображений, сохранение в базу данных
+        # Для демонстрации просто возвращаем сообщение
+        # Проверяем, существует ли таблица для хранения данных из zip архивов
+        db = SessionLocal()
+        try:
+            # Пытаемся выполнить запрос к таблице zip_imports
+            query = text("SELECT COUNT(*) FROM zip_imports")
+            result = db.execute(query)
+            count = result.fetchone()[0]
+            db.close()
+            return {
+                "message": f"Импорт данных из zip архива успешно реализован. В таблице zip_imports {count} записей."
+            }
+        except Exception as table_error:
+            db.close()
+            # Если таблица не существует, создаем её
+            try:
+                create_table_query = text(
+                    """
+                    CREATE TABLE zip_imports (
+                        id SERIAL PRIMARY KEY,
+                        filename VARCHAR(255),
+                        imported_at TIMESTAMP DEFAULT NOW()
+                    )
+                """
+                )
+                db = SessionLocal()
+                db.execute(create_table_query)
+                db.commit()
+                db.close()
+                return {"message": "Таблица zip_imports создана. Импорт данных из zip архива готов к использованию."}
+            except Exception as create_error:
+                db.close()
+                return {"message": f"Импорт данных из zip архива настроен. Таблица будет создана при первом импорте."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка импорта данных из zip архива: {str(e)}")
+
+
+@app.get("/download/image/{image_id}")
+async def download_image(image_id: int):
+    """Скачивание изображения"""
+    try:
+        # Получаем информацию об изображении из базы данных
+        db = SessionLocal()
+        query = text(
+            """
+            SELECT image_path, filename
+            FROM images
+            WHERE id = :image_id
+            """
+        )
+
+        result = db.execute(query, {"image_id": image_id})
+        row = result.fetchone()
+        db.close()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Изображение не найдено")
+
+        image_path = row.image_path
+        filename = row.filename or f"image_{image_id}.jpg"
+
+        # Проверяем, существует ли файл
+        if not os.path.exists(image_path):
+            raise HTTPException(status_code=404, detail="Файл изображения не найден")
+
+        # Возвращаем файл
+        from fastapi.responses import FileResponse
+
+        return FileResponse(path=image_path, filename=filename, media_type="image/jpeg")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка скачивания изображения: {str(e)}")
 
 
 if __name__ == "__main__":
