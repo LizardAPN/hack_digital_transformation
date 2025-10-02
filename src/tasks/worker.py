@@ -65,12 +65,12 @@ cv_model: Optional[CVModel] = None
 def get_cv_model():
     """
     Получение глобального экземпляра CV модели
-    
+
     Возвращает
     -------
     CVModel
         Экземпляр CV модели
-        
+
     Примеры
     --------
     >>> model = get_cv_model()
@@ -86,7 +86,7 @@ def get_cv_model():
 def process_image_task(self, owner_id: int, image_path: str, request_id: str = None, photo_id: int = None) -> dict:
     """
     Асинхронная задача для обработки изображения
-    
+
     Параметры
     ----------
     owner_id : int
@@ -97,12 +97,12 @@ def process_image_task(self, owner_id: int, image_path: str, request_id: str = N
         Идентификатор запроса (для отслеживания) (по умолчанию None)
     photo_id : int, optional
         Идентификатор фото в базе данных (по умолчанию None)
-        
+
     Возвращает
     -------
     dict
         Результат обработки изображения
-        
+
     Примеры
     --------
     >>> result = process_image_task("path/to/image.jpg", "req_123")
@@ -147,14 +147,14 @@ def process_image_task(self, owner_id: int, image_path: str, request_id: str = N
 def save_result_to_db(result: dict, owner_id: int):
     """
     Сохранение результата обработки в базу данных
-    
+
     Параметры
     ----------
     result : dict
         Результат обработки изображения
     owner_id : int
         Идентификатор владельца изображения
-        
+
     Примеры
     --------
     >>> result = {"image_path": "path/to/image.jpg", "task_id": "task_123"}
@@ -206,7 +206,7 @@ def save_result_to_db(result: dict, owner_id: int):
                     "buildings": buildings_json,
                     "processed_at": processed_at,
                     "error": error,
-                    "owner_id": owner_id
+                    "owner_id": owner_id,
                 },
             )
         except Exception as e:
@@ -256,19 +256,19 @@ def save_result_to_db(result: dict, owner_id: int):
 def batch_process_images_task(self, image_paths: list, request_id: str = None) -> dict:
     """
     Асинхронная задача для пакетной обработки изображений
-    
+
     Параметры
     ----------
     image_paths : list
         Список путей к изображениям
     request_id : str, optional
         Идентификатор запроса (для отслеживания) (по умолчанию None)
-        
+
     Возвращает
     -------
     dict
         Сводный результат обработки
-        
+
     Примеры
     --------
     >>> image_paths = ["path/to/image1.jpg", "path/to/image2.jpg"]
