@@ -23,7 +23,8 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Optional
 import io
-import os 
+import json
+import os
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -31,6 +32,8 @@ import faiss
 from geoclip import ImageEncoder
 import torch
 import torchvision.transforms as transforms
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
 
 from src.geo.geocoder import geocode_coordinates
 from src.utils.config import DATA_PATHS, s3_manager
@@ -131,7 +134,8 @@ class CVModel:
         self,
         faiss_index_path: str = "data/index/faiss_index.bin",
         mapping_path: str = "data/index/image_mapping.csv",
-        train_metadata_path: str = "data/processed/moscow_images.csv"
+        train_metadata_path: str = "data/processed/moscow_images.csv",
+        database_url: str = None
     ):
         """
         Инициализация модели: загрузка GeoCLIP и FAISS индекса.
@@ -157,25 +161,44 @@ class CVModel:
         self.faiss_indexer = FaissIndexer(dimension=512)
         self.faiss_indexer.load_index(faiss_index_path, mapping_path)
         
-        # Загружаем метаданные (координаты по image_id)
+        # Настройка подключения к базе данных
+        self.database_url = database_url or os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/building_detector")
+        self.engine = create_engine(self.database_url)
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+        
+        # Загружаем метаданные (координаты по image_path) из CSV файла
+        logger.info("Начало загрузки метаданных из CSV файла")
         self.metadata = self._load_metadata(train_metadata_path)
-        logger.info(f"Загружено {len(self.metadata)} записей метаданных")
+        logger.info(f"Загружено {len(self.metadata)} записей метаданных из CSV файла")
+        
+        # Если не удалось загрузить из CSV, пробуем загрузить из базы данных
+        if len(self.metadata) == 0:
+            logger.info("Не удалось загрузить метаданные из CSV файла, пробуем загрузить из базы данных")
+            self.metadata = self._load_metadata_from_db()
+            logger.info(f"Загружено {len(self.metadata)} записей метаданных из базы данных")
 
     def _load_metadata(self, csv_path: str) -> Dict[str, Dict[str, float]]:
-        """Загружает метаданные: image_id -> {lat, lon}"""
+        """Загружает метаданные: s3_key -> {lat, lon} и filename -> {lat, lon}"""
         metadata = {}
         try:
             if os.path.exists(csv_path):
                 df = pd.read_csv(csv_path)
                 logger.info(f"Колонки в файле метаданных: {df.columns.tolist()}")
                 
-                # Используем колонку 'id' как image_id
+                # Используем колонку 's3_key' как ключ и создаем дополнительный индекс по именам файлов
                 for _, row in df.iterrows():
                     try:
-                        image_id = str(row['id'])
+                        s3_key = str(row['id'])
                         lat = float(row['latitude'])
                         lon = float(row['longitude'])
-                        metadata[image_id] = {"lat": lat, "lon": lon}
+                        coords = {"lat": lat, "lon": lon}
+                        
+                        # Добавляем запись по s3_key
+                        metadata[s3_key] = coords
+                        
+                        # Добавляем запись по имени файла
+                        filename = os.path.basename(s3_key)
+                        metadata[filename] = coords
                     except (ValueError, TypeError) as e:
                         logger.warning(f"Пропуск строки с невалидными данными: {e}")
                         continue
@@ -186,6 +209,47 @@ class CVModel:
                 
         except Exception as e:
             logger.error(f"Ошибка загрузки метаданных: {e}")
+        
+        return metadata
+    
+    def _load_metadata_from_db(self) -> Dict[str, Dict[str, float]]:
+        """Загружает метаданные из базы данных: image_path -> {lat, lon}"""
+        metadata = {}
+        try:
+            logger.info("Начало загрузки метаданных из базы данных")
+            db = self.SessionLocal()
+            logger.info("Подключение к базе данных установлено")
+            # Запрашиваем все записи из таблицы processing_results, где есть координаты
+            query = text("""
+                SELECT image_path, coordinates
+                FROM processing_results
+                WHERE coordinates IS NOT NULL AND coordinates != '{}'
+            """)
+            
+            result = db.execute(query)
+            rows = result.fetchall()
+            logger.info(f"Получено {len(rows)} записей из базы данных")
+            db.close()
+            
+            # Обрабатываем результаты
+            for row in rows:
+                try:
+                    # Используем image_path как ключ
+                    image_path = str(row.image_path)
+                    # Парсим JSON координат
+                    coords = json.loads(row.coordinates) if isinstance(row.coordinates, str) else row.coordinates
+                    if coords and "lat" in coords and "lon" in coords:
+                        metadata[image_path] = {"lat": float(coords["lat"]), "lon": float(coords["lon"])}
+                except (ValueError, TypeError, json.JSONDecodeError) as e:
+                    logger.warning(f"Пропуск строки с невалидными данными: {e}")
+                    continue
+            
+            logger.info(f"Метаданные загружены из базы данных, всего записей: {len(metadata)}")
+                
+        except Exception as e:
+            logger.error(f"Ошибка загрузки метаданных из базы данных: {e}", exc_info=True)
+            if "db" in locals():
+                db.close()
         
         return metadata
 
@@ -251,15 +315,15 @@ class CVModel:
             else:
                 # Берем самое похожее изображение
                 best_match = similar_results[0]
-                image_id = best_match["image_id"]  # Используем ID для поиска в метаданных
+                matched_image_id = best_match["image_id"]  # ID из FAISS индекса
                 similarity = best_match["similarity"]
                 
-                logger.info(f"Лучшее совпадение: image_id={image_id} (сходство: {similarity:.4f})")
+                logger.info(f"Лучшее совпадение: image_id={matched_image_id} (сходство: {similarity:.4f})")
 
-                # Получаем координаты по ID
-                coords = self.metadata.get(image_id)
+                # Получаем координаты по image_path (теперь ищем напрямую по имени файла)
+                coords = self.metadata.get(str(matched_image_id))
                 if not coords:
-                    logger.warning(f"Нет координат для изображения: {image_id}, используем тестовые координаты")
+                    logger.warning(f"Нет координат для изображения: {matched_image_id}, используем тестовые координаты")
                     result["coordinates"] = {"lat": 55.7558, "lon": 37.6173}
                 else:
                     result["coordinates"] = coords

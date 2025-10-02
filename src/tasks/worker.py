@@ -172,33 +172,64 @@ def save_result_to_db(result: dict, owner_id):
         buildings_json = json.dumps(buildings) if buildings else "[]"
 
         # Вставляем данные в таблицу
-        query = text(
+        try:
+            # Пытаемся вставить с owner_id (новая версия таблицы)
+            query = text(
+                """
+                INSERT INTO processing_results (
+                    image_path, task_id, request_id, coordinates, address,
+                    ocr_result, buildings, processed_at, error, owner_id
+                ) VALUES (
+                    :image_path, :task_id, :request_id, :coordinates, :address,
+                    :ocr_result, :buildings, :processed_at, :error, :owner_id
+                )
             """
-            INSERT INTO processing_results (
-                image_path, task_id, request_id, coordinates, address, 
-                ocr_result, buildings, processed_at, error, owner_id
-            ) VALUES (
-                :image_path, :task_id, :request_id, :coordinates, :address,
-                :ocr_result, :buildings, :processed_at, :error, :owner_id
             )
-        """
-        )
 
-        db.execute(
-            query,
-            {
-                "image_path": image_path,
-                "task_id": task_id,
-                "request_id": request_id,
-                "coordinates": coordinates_json,
-                "address": address,
-                "ocr_result": ocr_result_json,
-                "buildings": buildings_json,
-                "processed_at": processed_at,
-                "error": error,
-                "owner_id": owner_id
-            },
-        )
+            db.execute(
+                query,
+                {
+                    "image_path": image_path,
+                    "task_id": task_id,
+                    "request_id": request_id,
+                    "coordinates": coordinates_json,
+                    "address": address,
+                    "ocr_result": ocr_result_json,
+                    "buildings": buildings_json,
+                    "processed_at": processed_at,
+                    "error": error,
+                    "owner_id": owner_id
+                },
+            )
+        except Exception as e:
+            # Если owner_id не существует, вставляем без него (старая версия таблицы)
+            logger.warning(f"owner_id column not found in processing_results table, inserting without it: {e}")
+            query = text(
+                """
+                INSERT INTO processing_results (
+                    image_path, task_id, request_id, coordinates, address,
+                    ocr_result, buildings, processed_at, error
+                ) VALUES (
+                    :image_path, :task_id, :request_id, :coordinates, :address,
+                    :ocr_result, :buildings, :processed_at, :error
+                )
+            """
+            )
+
+            db.execute(
+                query,
+                {
+                    "image_path": image_path,
+                    "task_id": task_id,
+                    "request_id": request_id,
+                    "coordinates": coordinates_json,
+                    "address": address,
+                    "ocr_result": ocr_result_json,
+                    "buildings": buildings_json,
+                    "processed_at": processed_at,
+                    "error": error,
+                },
+            )
 
         db.commit()
         db.close()

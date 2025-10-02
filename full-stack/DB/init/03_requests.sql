@@ -9,5 +9,5 @@ CREATE TABLE IF NOT EXISTS processing_results (
     buildings JSONB,
     processed_at TIMESTAMPTZ DEFAULT now(),
     error TEXT,
-    FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+    owner_id INT
 );
