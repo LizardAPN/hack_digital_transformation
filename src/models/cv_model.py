@@ -371,5 +371,15 @@ class CVModel:
 def create_cv_model() -> CVModel:
     """
     Фабричная функция для создания экземпляра CVModel
+    
+    Возвращает
+    -------
+    CVModel
+        Экземпляр модели компьютерного зрения
+        
+    Примеры
+    --------
+    >>> model = create_cv_model()
+    >>> result = model.process_image("path/to/image.jpg")
     """
     return CVModel()
