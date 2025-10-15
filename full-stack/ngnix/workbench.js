@@ -300,7 +300,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Function to check for photo processing results every second
     function checkPhotoStatus() {
         // Find all photo cards with unknown status
-        const unknownStatusPhotos = document.querySelectorAll('.photo-status.unknown');
+        const unknownStatusPhotos = document.querySelectorAll('.photo-status.processing');
         
         unknownStatusPhotos.forEach(photoStatusElement => {
             // Get the parent photo card
