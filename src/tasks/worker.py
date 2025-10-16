@@ -50,7 +50,7 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     task_acks_late=True,
     worker_max_tasks_per_child=1000,
-    worker_concurrency=int(os.getenv("CELERY_WORKER_CONCURRENCY", "4")),
+    worker_concurrency=int(os.getenv("CELERY_WORKER_CONCURRENCY", "1")),
 )
 
 # Настройка подключения к базе данных
