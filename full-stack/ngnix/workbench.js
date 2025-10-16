@@ -1,6 +1,181 @@
 // Workbench JavaScript functionality
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Default chat name in Russian
+    const defaultChatName = 'Чат';
+    
+    // Get chats from localStorage or create default chat
+    function getChats() {
+        const savedChats = localStorage.getItem('chats');
+        if (savedChats) {
+            try {
+                return JSON.parse(savedChats);
+            } catch (e) {
+                console.error('Error parsing saved chats:', e);
+                return [{ id: Date.now(), name: defaultChatName }];
+            }
+        }
+        // Create default chat if none exist
+        return [{ id: Date.now(), name: defaultChatName }];
+    }
+    
+    // Save chats to localStorage
+    function saveChats(chats) {
+        localStorage.setItem('chats', JSON.stringify(chats));
+    }
+    
+    // Edit chat name function
+    function editChatName(chatId, currentName) {
+        const newName = prompt('Введите новое название для чата:', currentName);
+        if (newName !== null && newName.trim() !== '') {
+            const chats = getChats();
+            const chatIndex = chats.findIndex(chat => chat.id === chatId);
+            if (chatIndex !== -1) {
+                chats[chatIndex].name = newName.trim();
+                saveChats(chats);
+                renderChats();
+            }
+        }
+    }
+    
+    // Add new chat function
+    function addNewChat() {
+        const chatName = prompt('Введите название для нового чата:', 'Новый чат');
+        if (chatName !== null && chatName.trim() !== '') {
+            const chats = getChats();
+            const newChat = {
+                id: Date.now(),
+                name: chatName.trim()
+            };
+            chats.push(newChat);
+            saveChats(chats);
+            renderChats();
+        }
+    }
+    
+    // Delete chat function
+    function deleteChat(chatId) {
+        if (confirm('Вы уверены, что хотите удалить этот чат?')) {
+            const chats = getChats();
+            const filteredChats = chats.filter(chat => chat.id !== chatId);
+            // Ensure at least one chat remains
+            if (filteredChats.length > 0) {
+                saveChats(filteredChats);
+                renderChats();
+            } else {
+                alert('Нельзя удалить последний чат');
+            }
+        }
+    }
+    
+    // Render chats function
+    function renderChats() {
+        const sidebarActions = document.querySelector('.sidebar-actions');
+        if (sidebarActions) {
+            sidebarActions.innerHTML = '';
+            const chats = getChats();
+            
+            chats.forEach(chat => {
+                const chatContainer = document.createElement('div');
+                chatContainer.className = 'chat-container';
+                chatContainer.style.display = 'flex';
+                chatContainer.style.alignItems = 'center';
+                chatContainer.style.marginBottom = '8px';
+                chatContainer.style.position = 'relative';
+                
+                const chatButton = document.createElement('button');
+                chatButton.textContent = chat.name;
+                chatButton.className = 'chat-button';
+                chatButton.style.flexGrow = '1';
+                chatButton.style.textAlign = 'left';
+                chatButton.style.padding = '12px 16px';
+                chatButton.style.border = '1px solid var(--panel-border)';
+                chatButton.style.borderRadius = '10px';
+                chatButton.style.background = '#0b1222';
+                chatButton.style.color = 'var(--text)';
+                chatButton.style.fontWeight = '500';
+                chatButton.style.cursor = 'pointer';
+                chatButton.style.transition = 'border-color 120ms ease, background 120ms ease';
+                chatButton.dataset.chatId = chat.id;
+                
+                // Add hover effect
+                chatButton.addEventListener('mouseenter', function() {
+                    this.style.borderColor = 'var(--ring)';
+                    this.style.background = '#0c1427';
+                });
+                
+                chatButton.addEventListener('mouseleave', function() {
+                    this.style.borderColor = 'var(--panel-border)';
+                    this.style.background = '#0b1222';
+                });
+                
+                // Add click to select chat functionality
+                chatButton.addEventListener('click', function() {
+                    // Remove active class from all chat buttons
+                    const allChatButtons = document.querySelectorAll('.chat-button');
+                    allChatButtons.forEach(btn => btn.classList.remove('active'));
+                    
+                    // Add active class to clicked button
+                    this.classList.add('active');
+                    this.style.background = 'var(--primary)';
+                    this.style.borderColor = 'var(--primary)';
+                });
+                
+                // Add double click to edit functionality
+                chatButton.addEventListener('dblclick', function() {
+                    editChatName(chat.id, chat.name);
+                });
+                
+                // Add delete button
+                const deleteButton = document.createElement('button');
+                deleteButton.textContent = '×';
+                deleteButton.className = 'delete-chat-button';
+                deleteButton.style.position = 'absolute';
+                deleteButton.style.right = '8px';
+                deleteButton.style.width = '20px';
+                deleteButton.style.height = '20px';
+                deleteButton.style.borderRadius = '50%';
+                deleteButton.style.border = 'none';
+                deleteButton.style.background = 'rgba(239, 68, 68, 0.15)';
+                deleteButton.style.color = '#ef4444';
+                deleteButton.style.fontSize = '16px';
+                deleteButton.style.fontWeight = 'bold';
+                deleteButton.style.cursor = 'pointer';
+                deleteButton.style.display = 'none';
+                deleteButton.style.alignItems = 'center';
+                deleteButton.style.justifyContent = 'center';
+                deleteButton.title = 'Удалить чат';
+                
+                // Show delete button on hover
+                chatContainer.addEventListener('mouseenter', function() {
+                    deleteButton.style.display = 'flex';
+                });
+                
+                chatContainer.addEventListener('mouseleave', function() {
+                    deleteButton.style.display = 'none';
+                });
+                
+                // Add click to delete functionality
+                deleteButton.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    deleteChat(chat.id);
+                });
+                
+                chatContainer.appendChild(chatButton);
+                chatContainer.appendChild(deleteButton);
+                sidebarActions.appendChild(chatContainer);
+            });
+        }
+    }
+    
+    // Initialize chats
+    renderChats();
+    
+    // Add event listener for add chat button
+    const addChatButton = document.getElementById('add-chat-button');
+    if (addChatButton) {
+        addChatButton.addEventListener('click', addNewChat);
+    }
     // Get DOM elements
     const uploadButton = document.getElementById('upload-button');
     const photoUploadInput = document.getElementById('photo-upload');
