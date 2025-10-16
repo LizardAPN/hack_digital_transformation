@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Check if passwords match
             if (password !== confirmPassword) {
-                alert('Passwords do not match');
+                alert('Пароли не совпадают');
                 return;
             }
             
@@ -35,11 +35,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else {
                     // Handle registration error
                     const errorData = await response.json();
-                    alert('Registration failed: ' + (errorData.detail || 'Unknown error'));
+                    alert('Ошибка регистрации: ' + (errorData.detail || 'Неизвестная ошибка'));
                 }
             } catch (error) {
-                console.error('Registration error:', error);
-                alert('An error occurred during registration. Please try again.');
+                console.error('Ошибка регистрации:', error);
+                alert('Произошла ошибка при регистрации. Пожалуйста, попробуйте снова.');
             }
         });
     }

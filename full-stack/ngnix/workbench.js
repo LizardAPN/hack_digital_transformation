@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Function to upload photo
     function uploadPhoto(file) {
-        uploadStatus.textContent = 'Uploading...';
+        uploadStatus.textContent = 'Загрузка...';
         uploadStatus.className = 'upload-status uploading';
         
         const formData = new FormData();
@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .then(data => {
-            uploadStatus.textContent = 'Upload successful!';
+            uploadStatus.textContent = 'Загрузка успешна!';
             uploadStatus.className = 'upload-status success';
             loadPhotos(); // Refresh photo grid
             photoUploadInput.value = ''; // Reset file input to allow re-upload of same file
@@ -95,9 +95,9 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 3000);
         })
         .catch(error => {
-            uploadStatus.textContent = 'Upload failed. Please try again.';
+            uploadStatus.textContent = 'Загрузка не удалась. Пожалуйста, попробуйте снова.';
             uploadStatus.className = 'upload-status error';
-            console.error('Upload error:', error);
+            console.error('Ошибка загрузки:', error);
             photoUploadInput.value = ''; // Reset file input to allow re-upload of same file
         });
     }
@@ -127,7 +127,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     return {...photo, processing_result: result};
                 })
                 .catch(error => {
-                    console.error('Error loading processing result for photo:', photo.id, error);
+                    console.error('Ошибка загрузки результатов обработки для фото:', photo.id, error);
                     return {...photo, processing_result: null};
                 });
             });
@@ -190,7 +190,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Build caption with processing results
         let captionHtml = `<h3>${new Date(photo.created_at).toLocaleString()}</h3>`;
-        captionHtml += `<p>Uploaded: ${new Date(photo.created_at).toLocaleString()}</p>`;
+        captionHtml += `<p>Загружено: ${new Date(photo.created_at).toLocaleString()}</p>`;
         
         if (photo.processing_result) {
             if (photo.processing_result.error) {
@@ -219,7 +219,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Function to search photos by coordinates or address
     function searchPhotos(query) {
-        searchResults.innerHTML = '<p>Searching...</p>';
+        searchResults.innerHTML = '<p>Поиск...</p>';
         
         // Check if query is coordinates (lat,lon format)
         const coordMatch = query.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
@@ -242,8 +242,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 displaySearchResults(data);
             })
             .catch(error => {
-                searchResults.innerHTML = '<p>Error searching by coordinates.</p>';
-                console.error('Search error:', error);
+                searchResults.innerHTML = '<p>Ошибка поиска по координатам.</p>';
+                console.error('Ошибка поиска:', error);
             });
         } else {
             // Search by address
@@ -260,8 +260,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 displaySearchResults(data);
             })
             .catch(error => {
-                searchResults.innerHTML = '<p>Error searching by address.</p>';
-                console.error('Search error:', error);
+                searchResults.innerHTML = '<p>Ошибка поиска по адресу.</p>';
+                console.error('Ошибка поиска:', error);
             });
         }
     }
@@ -269,18 +269,18 @@ document.addEventListener('DOMContentLoaded', function() {
     // Function to display search results
     function displaySearchResults(results) {
         if (results.length === 0) {
-            searchResults.innerHTML = '<p>No results found.</p>';
+            searchResults.innerHTML = '<p>Результаты не найдены.</p>';
             return;
         }
         
-        let html = '<h4>Search Results:</h4><div class="search-results-grid">';
+        let html = '<h4>Результаты поиска:</h4><div class="search-results-grid">';
         results.forEach(result => {
             html += `
                 <div class="search-result-item">
-                    <p><strong>Coordinates:</strong> ${result.coordinates.lat}, ${result.coordinates.lon}</p>
-                    <p><strong>Address:</strong> ${result.address || 'N/A'}</p>
-                    <p><strong>Distance:</strong> ${result.distance_km ? result.distance_km.toFixed(2) + ' km' : 'N/A'}</p>
-                    <p><strong>Processed:</strong> ${new Date(result.processed_at).toLocaleString()}</p>
+                    <p><strong>Координаты:</strong> ${result.coordinates.lat}, ${result.coordinates.lon}</p>
+                    <p><strong>Адрес:</strong> ${result.address || 'Н/Д'}</p>
+                    <p><strong>Расстояние:</strong> ${result.distance_km ? result.distance_km.toFixed(2) + ' км' : 'Н/Д'}</p>
+                    <p><strong>Обработано:</strong> ${new Date(result.processed_at).toLocaleString()}</p>
                 </div>
             `;
         });
@@ -337,7 +337,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 })
                 .catch(error => {
-                    console.error('Error checking photo status:', error);
+                    console.error('Ошибка проверки статуса фото:', error);
                 });
         });
         
@@ -379,7 +379,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 })
                 .catch(error => {
-                    console.error('Error checking photo status:', error);
+                    console.error('Ошибка проверки статуса фото:', error);
                 });
         });
     }

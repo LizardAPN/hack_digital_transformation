@@ -1,39 +1,39 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>Login</title>
+	<title>Вход</title>
 	<link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 	<div class="container">
 		<div class="card" role="region" aria-labelledby="login-title">
 			<div class="header">
-				<h1 id="login-title">Welcome back</h1>
-				<p>Sign in to your account to continue</p>
+				<h1 id="login-title">Добро пожаловать</h1>
+				<p>Войдите в свой аккаунт для продолжения</p>
 			</div>
 
 			<form class="form" action="#" method="post" autocomplete="on">
-				<label class="label" for="login">Login</label>
-				<input class="input" type="text" id="login" name="login" placeholder="your_login" required />
+				<label class="label" for="login">Логин</label>
+				<input class="input" type="text" id="login" name="login" placeholder="ваш_логин" required />
 
-				<label class="label" for="password">Password</label>
+				<label class="label" for="password">Пароль</label>
 				<input class="input" type="password" id="password" name="password" placeholder="••••••••" minlength="6" required />
 
 				<div class="row">
 					<label class="checkbox">
 						<input type="checkbox" name="remember" />
-						<span>Remember me</span>
+						<span>Запомнить меня</span>
 					</label>
-					<a class="link" href="#" aria-label="Forgot your password? Reset it here">Forgot password?</a>
+					<a class="link" href="#" aria-label="Забыли пароль? Сбросьте его здесь">Забыли пароль?</a>
 				</div>
 
-				<button class="button" type="submit">Sign in</button>
+				<button class="button" type="submit">Войти</button>
 			</form>
 
 			<div class="footer">
-				<span>Don't have an account? </span><a href="register.html">Sign up</a>
+				<span>Нет аккаунта? </span><a href="register.html">Зарегистрироваться</a>
 			</div>
 		</div>
 	</div>
