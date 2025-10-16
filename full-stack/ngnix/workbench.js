@@ -1,6 +1,9 @@
 // Workbench JavaScript functionality
 
-document.addEventListener('DOMContentLoaded', function() {
+// Chat functionality
+function initializeChatFunctionality() {
+    console.log('Initializing chat functionality');
+    
     // Default chat name in Russian
     const defaultChatName = 'Чат';
     
@@ -70,10 +73,18 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Render chats function
     function renderChats() {
+        console.log('Rendering chats');
         const sidebarActions = document.querySelector('.sidebar-actions');
         if (sidebarActions) {
+            console.log('Found sidebar-actions element');
             sidebarActions.innerHTML = '';
             const chats = getChats();
+            console.log('Chats:', chats);
+            
+            // Clear any existing content
+            while (sidebarActions.firstChild) {
+                sidebarActions.removeChild(sidebarActions.firstChild);
+            }
             
             chats.forEach(chat => {
                 const chatContainer = document.createElement('div');
@@ -165,17 +176,34 @@ document.addEventListener('DOMContentLoaded', function() {
                 chatContainer.appendChild(deleteButton);
                 sidebarActions.appendChild(chatContainer);
             });
+        } else {
+            console.error('Could not find sidebar-actions element');
         }
     }
     
     // Initialize chats
-    renderChats();
+    console.log('Initializing chats');
+    // Use a slight delay to ensure DOM is fully ready
+    setTimeout(function() {
+        try {
+            renderChats();
+        } catch (error) {
+            console.error('Error initializing chats:', error);
+        }
+    }, 100);
     
     // Add event listener for add chat button
     const addChatButton = document.getElementById('add-chat-button');
     if (addChatButton) {
         addChatButton.addEventListener('click', addNewChat);
     }
+}
+
+// Initialize chat functionality when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded');
+    initializeChatFunctionality();
+    
     // Get DOM elements
     const uploadButton = document.getElementById('upload-button');
     const photoUploadInput = document.getElementById('photo-upload');
