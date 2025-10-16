@@ -222,20 +222,46 @@ body {
 	flex-direction: column;
 }
 
-.sidebar-header h2 {
-	margin-top: 0;
+.sidebar-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
 	margin-bottom: 20px;
+}
+
+.sidebar-header h2 {
+	margin: 0;
 	font-size: 24px;
 	letter-spacing: 0.2px;
+}
+
+#add-chat-button {
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	background: var(--primary);
+	color: white;
+	border: none;
+	font-size: 20px;
+	font-weight: bold;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: background 120ms ease;
+}
+
+#add-chat-button:hover {
+	background: var(--primary-600);
 }
 
 .sidebar-actions {
 	display: flex;
 	flex-direction: column;
-	gap: 12px;
+	gap: 8px;
 }
 
-.action-button {
+.chat-button {
 	padding: 12px 16px;
 	border: 1px solid var(--panel-border);
 	border-radius: 10px;
@@ -245,11 +271,39 @@ body {
 	cursor: pointer;
 	transition: border-color 120ms ease, background 120ms ease;
 	text-align: left;
+	width: 100%;
 }
 
-.action-button:hover {
+.chat-button:hover {
 	border-color: var(--ring);
 	background: #0c1427;
+}
+
+.chat-button.active {
+	background: var(--primary);
+	border-color: var(--primary);
+	color: white;
+}
+
+.delete-chat-button {
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	border: none;
+	background: rgba(239, 68, 68, 0.15);
+	color: #ef4444;
+	font-size: 16px;
+	font-weight: bold;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: background 120ms ease, color 120ms ease;
+}
+
+.delete-chat-button:hover {
+	background: rgba(239, 68, 68, 0.25);
+	color: #ff6b6b;
 }
 
 .logout-container {
