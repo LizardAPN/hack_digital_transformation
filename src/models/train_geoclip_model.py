@@ -205,7 +205,7 @@ class GeoCLIPFineTuner:
         return None, None, None
     
     def train_epoch(self, dataloader, epoch):
-        """Один эпох обучения"""
+        """Одна эпоха обучения"""
         self.model.train()
         total_loss = 0
         num_batches = 0
@@ -662,7 +662,7 @@ def main():
     """Основная функция для дообучения GeoCLIP и создания FAISS индекса."""
     
     parser = argparse.ArgumentParser(description='Дообучение GeoCLIP и создание FAISS индекса')
-    parser.add_argument('--fine-tune', action='store_true', 
+    parser.add_argument('--fine-tune', action='store_true', default=True,
                        help='Выполнить дообучение модели')
     parser.add_argument('--fine-tune-sample-size', type=int, default=10000,
                        help='Количество изображений для дообучения')
