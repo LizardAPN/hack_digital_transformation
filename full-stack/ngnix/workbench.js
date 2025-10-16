@@ -15,11 +15,28 @@ function initializeChatFunctionality() {
                 return JSON.parse(savedChats);
             } catch (e) {
                 console.error('Error parsing saved chats:', e);
-                return [{ id: Date.now(), name: defaultChatName }];
+                return [{ id: Date.now(), name: defaultChatName, history: [] }];
             }
         }
         // Create default chat if none exist
-        return [{ id: Date.now(), name: defaultChatName }];
+        return [{ id: Date.now(), name: defaultChatName, history: [] }];
+    }
+    
+    // Get chat history
+    function getChatHistory(chatId) {
+        const chats = getChats();
+        const chat = chats.find(c => c.id === chatId);
+        return chat ? chat.history || [] : [];
+    }
+    
+    // Save chat history
+    function saveChatHistory(chatId, history) {
+        const chats = getChats();
+        const chatIndex = chats.findIndex(c => c.id === chatId);
+        if (chatIndex !== -1) {
+            chats[chatIndex].history = history;
+            saveChats(chats);
+        }
     }
     
     // Save chats to localStorage
@@ -71,6 +88,80 @@ function initializeChatFunctionality() {
         }
     }
     
+    // Current active chat ID
+    let currentChatId = null;
+    
+    // Add message to chat history
+    function addMessageToChat(chatId, message, sender) {
+        const history = getChatHistory(chatId);
+        const newMessage = {
+            id: Date.now(),
+            text: message,
+            sender: sender, // 'user' or 'assistant'
+            timestamp: new Date()
+        };
+        history.push(newMessage);
+        saveChatHistory(chatId, history);
+        return newMessage;
+    }
+    
+    // Display chat messages
+    function displayChatMessages(chatId) {
+        const chatContainer = document.getElementById('chat-container');
+        const messagesContainer = document.getElementById('chat-messages');
+        
+        if (chatContainer && messagesContainer) {
+            // Show chat container
+            chatContainer.style.display = 'flex';
+            
+            // Clear existing messages
+            messagesContainer.innerHTML = '';
+            
+            // Get chat history
+            const history = getChatHistory(chatId);
+            
+            // Display messages
+            history.forEach(message => {
+                const messageElement = document.createElement('div');
+                messageElement.className = `chat-message ${message.sender}`;
+                messageElement.textContent = message.text;
+                messagesContainer.appendChild(messageElement);
+            });
+            
+            // Scroll to bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+    }
+    
+    // Set current chat
+    function setCurrentChat(chatId) {
+        currentChatId = chatId;
+        // Update UI to reflect current chat
+        const allChatButtons = document.querySelectorAll('.chat-button');
+        allChatButtons.forEach(btn => {
+            if (btn.dataset.chatId == chatId) {
+                btn.classList.add('active');
+                btn.style.background = 'var(--primary)';
+                btn.style.borderColor = 'var(--primary)';
+            } else {
+                btn.classList.remove('active');
+                btn.style.background = '#0b1222';
+                btn.style.borderColor = 'var(--panel-border)';
+            }
+        });
+        
+        // Update export button to export current chat
+        const exportButton = document.getElementById('export-xlsx-button');
+        if (exportButton) {
+            exportButton.onclick = function() {
+                exportChatToXlsx(chatId);
+            };
+        }
+        
+        // Display chat messages
+        displayChatMessages(chatId);
+    }
+    
     // Render chats function
     function renderChats() {
         console.log('Rendering chats');
@@ -86,7 +177,7 @@ function initializeChatFunctionality() {
                 sidebarActions.removeChild(sidebarActions.firstChild);
             }
             
-            chats.forEach(chat => {
+            chats.forEach((chat, index) => {
                 const chatContainer = document.createElement('div');
                 chatContainer.className = 'chat-container';
                 chatContainer.style.display = 'flex';
@@ -122,14 +213,7 @@ function initializeChatFunctionality() {
                 
                 // Add click to select chat functionality
                 chatButton.addEventListener('click', function() {
-                    // Remove active class from all chat buttons
-                    const allChatButtons = document.querySelectorAll('.chat-button');
-                    allChatButtons.forEach(btn => btn.classList.remove('active'));
-                    
-                    // Add active class to clicked button
-                    this.classList.add('active');
-                    this.style.background = 'var(--primary)';
-                    this.style.borderColor = 'var(--primary)';
+                    setCurrentChat(chat.id);
                 });
                 
                 // Add double click to edit functionality
@@ -175,6 +259,16 @@ function initializeChatFunctionality() {
                 chatContainer.appendChild(chatButton);
                 chatContainer.appendChild(deleteButton);
                 sidebarActions.appendChild(chatContainer);
+                
+                // Set first chat as active if no chat is currently selected
+                if (index === 0 && currentChatId === null) {
+                    setCurrentChat(chat.id);
+                } else if (chat.id === currentChatId) {
+                    // Restore active state for current chat
+                    chatButton.classList.add('active');
+                    chatButton.style.background = 'var(--primary)';
+                    chatButton.style.borderColor = 'var(--primary)';
+                }
             });
         } else {
             console.error('Could not find sidebar-actions element');
@@ -497,6 +591,18 @@ document.addEventListener('DOMContentLoaded', function() {
         window.location.href = '/export/results/xlsx';
     }
     
+    // Function to export specific chat to XLSX
+    function exportChatToXlsx(chatId) {
+        // Get chat history
+        const history = getChatHistory(chatId);
+        
+        // Convert history to a format suitable for XLSX export
+        // For now, we'll redirect to a server endpoint that handles the export
+        // In a real implementation, this would likely involve generating the XLSX client-side
+        // or sending the data to the server for processing
+        window.location.href = `/export/chat/${chatId}/xlsx`;
+    }
+    
     // Load photos when page loads
     loadPhotos();
     
@@ -589,4 +695,46 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Run the checkPhotoStatus function every second
     setInterval(checkPhotoStatus, 1000);
+    
+    // Chat input functionality
+    const chatInput = document.getElementById('chat-input');
+    const sendMessageButton = document.getElementById('send-message-button');
+    
+    // Function to send a message
+    function sendMessage() {
+        if (!currentChatId) return;
+        
+        const message = chatInput.value.trim();
+        if (message) {
+            // Add user message to chat history
+            addMessageToChat(currentChatId, message, 'user');
+            
+            // Display updated chat messages
+            displayChatMessages(currentChatId);
+            
+            // Clear input
+            chatInput.value = '';
+            
+            // Simulate assistant response (in a real app, this would come from an API)
+            setTimeout(() => {
+                const assistantMessage = `Вы сказали: "${message}". Это демонстрационный ответ.`;
+                addMessageToChat(currentChatId, assistantMessage, 'assistant');
+                displayChatMessages(currentChatId);
+            }, 1000);
+        }
+    }
+    
+    // Event listener for send button
+    if (sendMessageButton) {
+        sendMessageButton.addEventListener('click', sendMessage);
+    }
+    
+    // Event listener for Enter key in chat input
+    if (chatInput) {
+        chatInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    }
 });
