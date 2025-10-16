@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Add some example action buttons
         for (let i = 1; i <= 5; i++) {
             const actionButton = document.createElement('button');
-            actionButton.textContent = `Action ${i}`;
+            actionButton.textContent = `Действие ${i}`;
             actionButton.className = 'action-button';
             sidebarActions.appendChild(actionButton);
         }
@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const logoutContainer = document.querySelector('.logout-container');
     if (logoutContainer) {
         const logoutButton = document.createElement('button');
-        logoutButton.textContent = 'Logout';
+        logoutButton.textContent = 'Выход';
         logoutButton.className = 'action-button';
         logoutButton.style.marginTop = 'auto';
         logoutButton.style.marginBottom = '20px';
@@ -29,8 +29,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Redirect to login page
                 window.location.href = '/login.html';
             } catch (error) {
-                console.error('Logout error:', error);
-                alert('An error occurred during logout. Please try again.');
+                console.error('Ошибка выхода:', error);
+                alert('Произошла ошибка при выходе. Пожалуйста, попробуйте снова.');
             }
         });
     }

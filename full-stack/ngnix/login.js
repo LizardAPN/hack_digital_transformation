@@ -27,11 +27,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else {
                     // Handle login error
                     const errorData = await response.json();
-                    alert('Login failed: ' + (errorData.detail || 'Unknown error'));
+                    alert('Ошибка входа: ' + (errorData.detail || 'Неизвестная ошибка'));
                 }
             } catch (error) {
-                console.error('Login error:', error);
-                alert('An error occurred during login. Please try again.');
+                console.error('Ошибка входа:', error);
+                alert('Произошла ошибка при входе. Пожалуйста, попробуйте снова.');
             }
         });
     }

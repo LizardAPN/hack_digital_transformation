@@ -1,37 +1,37 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>Register</title>
+	<title>Регистрация</title>
 	<link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 	<div class="container">
 		<div class="card" role="region" aria-labelledby="register-title">
 			<div class="header">
-				<h1 id="register-title">Create an account</h1>
-				<p>Sign up for an account to get started</p>
+				<h1 id="register-title">Создать аккаунт</h1>
+				<p>Зарегистрируйтесь, чтобы начать работу</p>
 			</div>
 
 			<form class="form" action="#" method="post" autocomplete="on">
-				<label class="label" for="name">Full Name</label>
-				<input class="input" type="text" id="name" name="name" placeholder="John Doe" required />
+				<label class="label" for="name">Полное имя</label>
+				<input class="input" type="text" id="name" name="name" placeholder="Иван Иванов" required />
 
 				<label class="label" for="email">Email</label>
 				<input class="input" type="email" id="email" name="email" placeholder="you@example.com" required />
 
-				<label class="label" for="password">Password</label>
+				<label class="label" for="password">Пароль</label>
 				<input class="input" type="password" id="password" name="password" placeholder="••••••••" minlength="6" required />
 
-				<label class="label" for="confirm-password">Confirm Password</label>
+				<label class="label" for="confirm-password">Подтвердите пароль</label>
 				<input class="input" type="password" id="confirm-password" name="confirm-password" placeholder="••••••••" minlength="6" required />
 
-				<button class="button" type="submit">Sign up</button>
+				<button class="button" type="submit">Зарегистрироваться</button>
 			</form>
 
 			<div class="footer">
-				<span>Already have an account? </span><a href="login.html">Sign in</a>
+				<span>Уже есть аккаунт? </span><a href="login.html">Войти</a>
 			</div>
 		</div>
 	</div>
