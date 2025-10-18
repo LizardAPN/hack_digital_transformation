@@ -60,6 +60,7 @@ def trigger_image_processing(image_path: str, owner_id: int, request_id: Optiona
     try:
         # Подготовка полезной нагрузки запроса
         payload = {
+            "workspace_id": workspace_id,
             "owner_id": owner_id,
             "image_path": image_path,
         }

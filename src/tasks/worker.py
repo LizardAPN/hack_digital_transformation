@@ -83,7 +83,7 @@ def get_cv_model():
 
 
 @celery_app.task(bind=True)
-def process_image_task(self, owner_id: int, image_path: str, request_id: str = None, photo_id: int = None) -> dict:
+def process_image_task(self, workspace_id: int, owner_id: int, image_path: str, request_id: str = None, photo_id: int = None) -> dict:
     """
     Асинхронная задача для обработки изображения
 
@@ -123,7 +123,7 @@ def process_image_task(self, owner_id: int, image_path: str, request_id: str = N
         result["processed_at"] = datetime.now().isoformat()
 
         # Сохраняем результат в базу данных
-        save_result_to_db(result, owner_id)
+        save_result_to_db(result, workspace_id, owner_id)
 
         logger.info(f"Обработка изображения завершена: {image_path}")
         return result
@@ -140,11 +140,11 @@ def process_image_task(self, owner_id: int, image_path: str, request_id: str = N
             "processed_at": datetime.now().isoformat(),
         }
 
-        save_result_to_db(error_result, owner_id)
+        save_result_to_db(error_result, workspace_id,  owner_id)
         raise
 
 
-def save_result_to_db(result: dict, owner_id: int):
+def save_result_to_db(result: dict, workspace_id: int,  owner_id: int):
     """
     Сохранение результата обработки в базу данных
 
@@ -186,10 +186,10 @@ def save_result_to_db(result: dict, owner_id: int):
                 """
                 INSERT INTO processing_results (
                     image_path, task_id, request_id, coordinates, address,
-                    ocr_result, buildings, processed_at, error, owner_id
+                    ocr_result, buildings, processed_at, error, owner_id, workspace_id
                 ) VALUES (
                     :image_path, :task_id, :request_id, :coordinates, :address,
-                    :ocr_result, :buildings, :processed_at, :error, :owner_id
+                    :ocr_result, :buildings, :processed_at, :error, :owner_id, :workspace_id
                 )
             """
             )
@@ -207,6 +207,7 @@ def save_result_to_db(result: dict, owner_id: int):
                     "processed_at": processed_at,
                     "error": error,
                     "owner_id": owner_id,
+                    "workspace_id": workspace_id
                 },
             )
         except Exception as e:

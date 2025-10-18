@@ -102,6 +102,7 @@ class ImageProcessRequest(BaseModel):
 class AsyncImageProcessRequest(BaseModel):
     """Модель запроса для асинхронной обработки изображения"""
 
+    workspace_id: int
     owner_id: int
     image_path: str
     request_id: Optional[str] = None
@@ -376,7 +377,7 @@ async def process_image_async(request: AsyncImageProcessRequest):
         request_id = request.request_id
         # Отправляем задачу в Celery для асинхронной обработки
         # Передаем workspace_id в задачу если он есть
-        task = process_image_task.delay(request.owner_id, request.image_path, request_id, request.workspace_id)
+        task = process_image_task.delay(request.workspace_id, request.owner_id, request.image_path, request_id, request.workspace_id)
 
         return AsyncTaskResponse(
             task_id=task.id, request_id=request_id, status="started", message="Задача принята в обработку"
