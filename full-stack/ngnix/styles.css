@@ -268,7 +268,7 @@ body {
 
 .upload-section {
 	display: flex;
-	flex-direction: column;
+	flex-direction: row;
 	align-items: flex-start;
 	gap: 10px;
 }
@@ -652,4 +652,42 @@ body {
 
 .export-section button:active {
 	transform: translateY(1px);
+}
+
+/* Pagination Styles */
+.pagination-container {
+	margin-top: 20px;
+	display: flex;
+	justify-content: center;
+}
+
+.pagination-controls {
+	display: flex;
+	gap: 8px;
+}
+
+.pagination-button {
+	padding: 8px 12px;
+	border: 1px solid var(--panel-border);
+	border-radius: 6px;
+	background: #0b1222;
+	color: var(--text);
+	cursor: pointer;
+	transition: all 120ms ease;
+}
+
+.pagination-button:hover {
+	border-color: var(--ring);
+	background: #0c1427;
+}
+
+.pagination-button.active {
+	background: var(--primary);
+	color: white;
+	border-color: var(--primary);
+}
+
+.pagination-button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
 }

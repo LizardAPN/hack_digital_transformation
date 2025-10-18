@@ -1,15 +1,5 @@
 document.addEventListener('DOMContentLoaded', function() {
     // Add action buttons
-    const sidebarActions = document.querySelector('.sidebar-actions');
-    if (sidebarActions) {
-        // Add some example action buttons
-        for (let i = 1; i <= 5; i++) {
-            const actionButton = document.createElement('button');
-            actionButton.textContent = `Действие ${i}`;
-            actionButton.className = 'action-button';
-            sidebarActions.appendChild(actionButton);
-        }
-    }
     
     // Add logout button to the bottom of the sidebar
     const logoutContainer = document.querySelector('.logout-container');

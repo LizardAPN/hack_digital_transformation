@@ -37,7 +37,7 @@ s3_client = boto3.client(
 )
 
 
-def trigger_image_processing(image_path: str, owner_id: int, request_id: Optional[str] = None, photo_id: Optional[int] = None) -> bool:
+def trigger_image_processing(image_path: str, owner_id: int, request_id: Optional[str] = None, photo_id: Optional[int] = None, workspace_id: Optional[int] = None) -> bool:
     """
     Запуск обработки изображения путем вызова API обработки изображений
     
@@ -71,6 +71,10 @@ def trigger_image_processing(image_path: str, owner_id: int, request_id: Optiona
         # Добавляем photo_id если он предоставлен
         if photo_id:
             payload["photo_id"] = str(photo_id)
+            
+        # Добавляем workspace_id если он предоставлен
+        if workspace_id:
+            payload["workspace_id"] = workspace_id
             
         # Вызов API обработки изображений
         response = requests.post(
@@ -166,7 +170,8 @@ def health():
 @app.post("/api/photo_upload")
 async def upload_photo(
     file: UploadFile = File(...),
-    session_token: str = Cookie(None)
+    session_token: str = Cookie(None),
+    workspace_id: Optional[int] = None
 ):
     """
     Загрузка фото в S3 и сохранение метаданных в базу данных
@@ -210,10 +215,17 @@ async def upload_photo(
         conn = psycopg2.connect(DATABASE_URL)
         cur = conn.cursor()
         
-        cur.execute(
-            "INSERT INTO user_photos (owner_id, photo_url) VALUES (%s, %s) RETURNING id, created_at",
-            (owner_id, photo_url)
-        )
+        # Формируем SQL-запрос в зависимости от наличия workspace_id
+        if workspace_id:
+            cur.execute(
+                "INSERT INTO user_photos (owner_id, photo_url, workspace_id) VALUES (%s, %s, %s) RETURNING id, created_at",
+                (owner_id, photo_url, workspace_id)
+            )
+        else:
+            cur.execute(
+                "INSERT INTO user_photos (owner_id, photo_url) VALUES (%s, %s) RETURNING id, created_at",
+                (owner_id, photo_url)
+            )
         
         result = cur.fetchone()
         if result is None:
@@ -226,7 +238,7 @@ async def upload_photo(
         conn.close()
         
         # Запуск обработки изображения
-        processing_triggered = trigger_image_processing(photo_url, owner_id, str(photo_id), photo_id)
+        processing_triggered = trigger_image_processing(photo_url, owner_id, str(photo_id), photo_id, workspace_id)
         
         return {
             "id": photo_id,
@@ -246,32 +258,52 @@ async def upload_photo(
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
 @app.get("/api/photos", response_model=UserPhotosResponse)
-def get_user_photos(session_token: str = Cookie(None)):
+def get_user_photos(session_token: str = Cookie(None), page: int = 1, limit: int = 10, workspace_id: Optional[int] = None):
     """
-    Получение всех фотографий аутентифицированного пользователя
+    Получение фотографий аутентифицированного пользователя с пагинацией
     
     Параметры
     ----------
     session_token : str, optional
         Токен сессии пользователя из cookie
+    page : int, optional
+        Номер страницы (по умолчанию 1)
+    limit : int, optional
+        Количество фотографий на странице (по умолчанию 10)
         
     Возвращает
     -------
     UserPhotosResponse
-        Список фотографий пользователя
+        Список фотографий пользователя для указанной страницы
     """
     # Аутентификация пользователя
     owner_id = get_user_id_from_session(session_token)
     
+    # Валидация параметров пагинации
+    if page < 1:
+        page = 1
+    if limit < 1 or limit > 100:
+        limit = 10
+    
     try:
-        # Получение фотографий из базы данных
+        # Получение фотографий из базы данных с учетом пагинации
         conn = psycopg2.connect(DATABASE_URL)
         cur = conn.cursor()
         
-        cur.execute(
-            "SELECT id, owner_id, photo_url, created_at FROM user_photos WHERE owner_id = %s ORDER BY created_at DESC",
-            (owner_id,)
-        )
+        # Вычисляем смещение для пагинации
+        offset = (page - 1) * limit
+        
+        # Формируем SQL-запрос в зависимости от наличия workspace_id
+        if workspace_id:
+            cur.execute(
+                "SELECT id, owner_id, photo_url, created_at FROM user_photos WHERE owner_id = %s AND workspace_id = %s ORDER BY created_at DESC LIMIT %s OFFSET %s",
+                (owner_id, workspace_id, limit, offset)
+            )
+        else:
+            cur.execute(
+                "SELECT id, owner_id, photo_url, created_at FROM user_photos WHERE owner_id = %s ORDER BY created_at DESC LIMIT %s OFFSET %s",
+                (owner_id, limit, offset)
+            )
         
         rows = cur.fetchall()
         cur.close()
@@ -300,7 +332,8 @@ def get_user_photos(session_token: str = Cookie(None)):
 @app.post("/api/zip_upload")
 async def upload_zip(
     file: UploadFile = File(...),
-    session_token: str = Cookie(None)
+    session_token: str = Cookie(None),
+    workspace_id: Optional[int] = None
 ):
     """
     Загрузка ZIP-файла с фотографиями в S3 и сохранение метаданных в базу данных
@@ -379,10 +412,17 @@ async def upload_zip(
                             conn = psycopg2.connect(DATABASE_URL)
                             cur = conn.cursor()
                             
-                            cur.execute(
-                                "INSERT INTO user_photos (owner_id, photo_url) VALUES (%s, %s) RETURNING id, created_at",
-                                (owner_id, unique_filename)
-                            )
+                            # Формируем SQL-запрос в зависимости от наличия workspace_id
+                            if workspace_id:
+                                cur.execute(
+                                    "INSERT INTO user_photos (owner_id, photo_url, workspace_id) VALUES (%s, %s, %s) RETURNING id, created_at",
+                                    (owner_id, unique_filename, workspace_id)
+                                )
+                            else:
+                                cur.execute(
+                                    "INSERT INTO user_photos (owner_id, photo_url) VALUES (%s, %s) RETURNING id, created_at",
+                                    (owner_id, unique_filename)
+                                )
                             
                             result = cur.fetchone()
                             if result is None:
@@ -395,7 +435,7 @@ async def upload_zip(
                             conn.close()
                             
                             # Запуск обработки изображения
-                            processing_triggered = trigger_image_processing(unique_filename, owner_id, str(photo_id), photo_id)
+                            processing_triggered = trigger_image_processing(unique_filename, owner_id, str(photo_id), photo_id, workspace_id)
                             
                             processed_files.append({
                                 "filename": filename,

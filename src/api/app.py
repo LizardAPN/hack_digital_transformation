@@ -2,6 +2,27 @@ import sys
 from pathlib import Path
 import os
 
+# Database migration notes:
+#
+# 1. Create workspaces table:
+# CREATE TABLE workspaces (
+#     id SERIAL PRIMARY KEY,
+#     user_id INTEGER NOT NULL,
+#     name VARCHAR(255) NOT NULL,
+#     created_at TIMESTAMP DEFAULT NOW(),
+#     FOREIGN KEY (user_id) REFERENCES users(id)
+# );
+#
+# 2. Add workspace_id column to processing_results table:
+# ALTER TABLE processing_results ADD COLUMN workspace_id INTEGER;
+# ALTER TABLE processing_results ADD CONSTRAINT fk_workspace
+#     FOREIGN KEY (workspace_id) REFERENCES workspaces(id);
+#
+# 3. Add workspace_id column to user_photos table:
+# ALTER TABLE user_photos ADD COLUMN workspace_id INTEGER;
+# ALTER TABLE user_photos ADD CONSTRAINT fk_workspace
+#     FOREIGN KEY (workspace_id) REFERENCES workspaces(id);
+
 # Добавляем путь к утилитам для корректной работы импортов
 utils_path = Path(__file__).resolve().parent.parent / "utils"
 if str(utils_path) not in sys.path:
@@ -84,6 +105,7 @@ class AsyncImageProcessRequest(BaseModel):
     owner_id: int
     image_path: str
     request_id: Optional[str] = None
+    workspace_id: Optional[int] = None
 
 
 class BatchImageProcessRequest(BaseModel):
@@ -91,6 +113,7 @@ class BatchImageProcessRequest(BaseModel):
 
     image_paths: List[str]
     request_id: Optional[str] = None
+    workspace_id: Optional[int] = None
 
 
 class BuildingDetection(BaseModel):
@@ -182,6 +205,35 @@ class UserQueryHistory(BaseModel):
     query_data: Dict[str, Any]  # Данные запроса (координаты, адрес, путь к изображению и т.д.)
     timestamp: datetime
     result_count: Optional[int] = None  # Количество найденных результатов
+
+
+class Workspace(BaseModel):
+    """Модель рабочей области"""
+    
+    id: Optional[int] = None
+    user_id: int
+    name: str
+    created_at: Optional[datetime] = None
+
+
+class WorkspaceCreateRequest(BaseModel):
+    """Модель запроса для создания рабочей области"""
+    
+    name: str
+
+
+class WorkspaceCreateResponse(BaseModel):
+    """Модель ответа для создания рабочей области"""
+    
+    success: bool
+    workspace: Optional[Workspace] = None
+    error: Optional[str] = None
+
+
+class WorkspacesResponse(BaseModel):
+    """Модель ответа для получения списка рабочих областей"""
+    
+    workspaces: List[Workspace]
 
 
 def load_model_and_config():
@@ -323,7 +375,8 @@ async def process_image_async(request: AsyncImageProcessRequest):
         # Используем request_id если предоставлен, иначе None
         request_id = request.request_id
         # Отправляем задачу в Celery для асинхронной обработки
-        task = process_image_task.delay(request.owner_id, request.image_path, request_id)
+        # Передаем workspace_id в задачу если он есть
+        task = process_image_task.delay(request.owner_id, request.image_path, request_id, request.workspace_id)
 
         return AsyncTaskResponse(
             task_id=task.id, request_id=request_id, status="started", message="Задача принята в обработку"
@@ -340,7 +393,8 @@ async def process_images_batch(request: BatchImageProcessRequest):
         request_id = request.request_id
 
         # Отправляем задачу в Celery для пакетной обработки
-        task = batch_process_images_task.delay(request.image_paths, request_id)
+        # Передаем workspace_id в задачу если он есть
+        task = batch_process_images_task.delay(request.image_paths, request_id, request.workspace_id)
 
         return AsyncTaskResponse(
             task_id=task.id,
@@ -406,22 +460,36 @@ async def get_tasks_by_request_id(request_id: str):
 
 
 @app.get("/results/latest")
-async def get_latest_results(limit: int = 10):
+async def get_latest_results(limit: int = 10, workspace_id: Optional[int] = None):
     """Получение последних результатов обработки"""
     try:
         db = SessionLocal()
         # Запрос к базе данных для получения последних результатов обработки
-        query = text(
+        # С учетом фильтрации по рабочей области, если она указана
+        if workspace_id:
+            query = text(
+                """
+                SELECT id, image_path, task_id, request_id, coordinates, address,
+                       ocr_result, buildings, processed_at, error
+                FROM processing_results
+                WHERE workspace_id = :workspace_id
+                ORDER BY processed_at DESC
+                LIMIT :limit
             """
-            SELECT id, image_path, task_id, request_id, coordinates, address, 
-                   ocr_result, buildings, processed_at, error
-            FROM processing_results
-            ORDER BY processed_at DESC
-            LIMIT :limit
-        """
-        )
-
-        result = db.execute(query, {"limit": limit})
+            )
+            result = db.execute(query, {"limit": limit, "workspace_id": workspace_id})
+        else:
+            query = text(
+                """
+                SELECT id, image_path, task_id, request_id, coordinates, address,
+                       ocr_result, buildings, processed_at, error
+                FROM processing_results
+                ORDER BY processed_at DESC
+                LIMIT :limit
+            """
+            )
+            result = db.execute(query, {"limit": limit})
+        
         results = result.fetchall()
         db.close()
 
@@ -431,23 +499,37 @@ async def get_latest_results(limit: int = 10):
 
 
 @app.get("/results/photo/{photo_id}")
-async def get_photo_results(photo_id: str):
+async def get_photo_results(photo_id: str, workspace_id: Optional[int] = None):
     """Получение результатов обработки для конкретного фото"""
     try:
         db = SessionLocal()
         # Запрос к базе данных для получения результатов обработки для конкретного фото
-        query = text(
+        # С учетом фильтрации по рабочей области, если она указана
+        if workspace_id:
+            query = text(
+                """
+                SELECT id, image_path, task_id, request_id, coordinates, address,
+                       ocr_result, buildings, processed_at, error
+                FROM processing_results
+                WHERE image_path = :image_path AND workspace_id = :workspace_id
+                ORDER BY processed_at DESC
+                LIMIT 1
             """
-            SELECT id, image_path, task_id, request_id, coordinates, address, 
-                   ocr_result, buildings, processed_at, error
-            FROM processing_results
-            WHERE image_path = :image_path
-            ORDER BY processed_at DESC
-            LIMIT 1
-        """
-        )
-
-        result = db.execute(query, {"image_path": photo_id})
+            )
+            result = db.execute(query, {"image_path": photo_id, "workspace_id": workspace_id})
+        else:
+            query = text(
+                """
+                SELECT id, image_path, task_id, request_id, coordinates, address,
+                       ocr_result, buildings, processed_at, error
+                FROM processing_results
+                WHERE image_path = :image_path
+                ORDER BY processed_at DESC
+                LIMIT 1
+            """
+            )
+            result = db.execute(query, {"image_path": photo_id})
+        
         row = result.fetchone()
         db.close()
 
@@ -591,78 +673,6 @@ async def search_by_address(request: SearchByAddressRequest):
         raise HTTPException(status_code=500, detail=f"Ошибка поиска по адресу: {str(e)}")
 
 
-@app.get("/export/results/xlsx")
-async def export_results_xlsx(session_token: str = Cookie(None)):
-    """Экспорт результатов обработки в формате XLSX"""
-    owner_id = get_user_id_from_session(session_token)
-    try:
-        import pandas as pd
-        from io import BytesIO
-        from fastapi.responses import StreamingResponse
-
-        # Получаем последние результаты из базы данных
-        db = SessionLocal()
-        query = text(
-            f"""
-            SELECT id, image_path, task_id, request_id, coordinates, address, 
-                   ocr_result, buildings, processed_at, error
-            FROM processing_results
-            WHERE owner_id = {owner_id}
-            ORDER BY processed_at DESC
-            LIMIT 1000
-        """
-        )
-
-        result = db.execute(query)
-        rows = result.fetchall()
-        db.close()
-
-        # Преобразуем данные в DataFrame
-        data = []
-        for row in rows:
-            # Преобразуем JSON поля в строки для экспорта
-            coords = json.loads(row.coordinates) if isinstance(row.coordinates, str) else row.coordinates
-            ocr = json.loads(row.ocr_result) if isinstance(row.ocr_result, str) else row.ocr_result
-            buildings = json.loads(row.buildings) if isinstance(row.buildings, str) else row.buildings
-
-            data.append(
-                {
-                    "ID": row.id,
-                    "Путь к изображению": row.image_path,
-                    "ID задачи": row.task_id,
-                    "ID запроса": row.request_id,
-                    "Широта": coords.get("lat") if coords else None,
-                    "Долгота": coords.get("lon") if coords else None,
-                    "Адрес": row.address,
-                    "OCR результат": str(ocr) if ocr else None,
-                    "Здания": str(buildings) if buildings else None,
-                    "Дата обработки": (
-                        row.processed_at.isoformat()
-                        if hasattr(row.processed_at, "isoformat")
-                        else str(row.processed_at)
-                    ),
-                    "Ошибка": row.error,
-                }
-            )
-
-        df = pd.DataFrame(data)
-
-        # Создаем буфер для XLSX файла
-        buffer = BytesIO()
-        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, sheet_name="Результаты обработки")
-
-        buffer.seek(0)
-
-        # Возвращаем файл как ответ
-        headers = {
-            "Content-Disposition": 'attachment; filename="processing_results.xlsx"',
-            "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        }
-
-        return StreamingResponse(buffer, headers=headers)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка экспорта в XLSX: {str(e)}")
 
 
 @app.post("/user/query_history", response_model=UserQueryHistory)
@@ -936,6 +946,173 @@ async def download_image(image_id: int):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка скачивания изображения: {str(e)}")
+
+
+@app.get("/api/workspaces", response_model=WorkspacesResponse)
+async def get_workspaces(session_token: str = Cookie(None)):
+    """Получение списка рабочих областей пользователя"""
+    print("Workspace enter")
+    owner_id = get_user_id_from_session(session_token)
+    try:
+        db = SessionLocal()
+        query = text(
+            """
+            SELECT id, user_id, name, created_at
+            FROM workspaces
+            WHERE user_id = :user_id
+            ORDER BY created_at DESC
+            """
+        )
+        result = db.execute(query, {"user_id": owner_id})
+        rows = result.fetchall()
+        db.close()
+        
+        workspaces = []
+        for row in rows:
+            workspaces.append(
+                Workspace(
+                    id=row.id,
+                    user_id=row.user_id,
+                    name=row.name,
+                    created_at=row.created_at
+                )
+            )
+        
+        return WorkspacesResponse(workspaces=workspaces)
+    except Exception as e:
+        print(f"Ошибка получения рабочих областей: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ошибка получения рабочих областей: {str(e)}")
+
+
+@app.post("/api/workspaces", response_model=WorkspaceCreateResponse)
+async def create_workspace(workspace_request: WorkspaceCreateRequest, session_token: str = Cookie(None)):
+    """Создание новой рабочей области"""
+    owner_id = get_user_id_from_session(session_token)
+    print("Workspace post enter")
+    try:
+        # Проверяем, что имя рабочей области не пустое
+        if not workspace_request.name or not workspace_request.name.strip():
+            return WorkspaceCreateResponse(success=False, error="Имя рабочей области не может быть пустым")
+        
+        db = SessionLocal()
+        query = text(
+            """
+            INSERT INTO workspaces (user_id, name, created_at)
+            VALUES (:user_id, :name, NOW())
+            RETURNING id, user_id, name, created_at
+            """
+        )
+        result = db.execute(query, {"user_id": owner_id, "name": workspace_request.name.strip()})
+        row = result.fetchone()
+        db.commit()
+        db.close()
+        
+        if row:
+            workspace = Workspace(
+                id=row.id,
+                user_id=row.user_id,
+                name=row.name,
+                created_at=row.created_at
+            )
+            return WorkspaceCreateResponse(success=True, workspace=workspace)
+        else:
+            return WorkspaceCreateResponse(success=False, error="Не удалось создать рабочую область")
+    except Exception as e:
+        print(f"Ошибка создания рабочей области: {str(e)}")
+        if "db" in locals():
+            db.rollback()
+            db.close()
+        raise HTTPException(status_code=500, detail=f"Ошибка создания рабочей области: {str(e)}")
+
+
+@app.get("/export/results/xlsx")
+async def export_results_xlsx(session_token: str = Cookie(None), workspace_id: Optional[int] = None):
+    """Экспорт результатов обработки в формате XLSX"""
+    print("Excporting, workspace_id ", workspace_id)
+    owner_id = get_user_id_from_session(session_token)
+    try:
+        import pandas as pd
+        from io import BytesIO
+        from fastapi.responses import StreamingResponse
+
+        # Получаем последние результаты из базы данных
+        db = SessionLocal()
+        
+        # Формируем запрос с учетом фильтрации по рабочей области
+        if workspace_id:
+            query = text(
+                """
+                SELECT id, image_path, task_id, request_id, coordinates, address,
+                       ocr_result, buildings, processed_at, error
+                FROM processing_results
+                WHERE owner_id = :owner_id AND workspace_id = :workspace_id
+                ORDER BY processed_at DESC
+                LIMIT 1000
+                """
+            )
+            result = db.execute(query, {"owner_id": owner_id, "workspace_id": workspace_id})
+        else:
+            query = text(
+                """
+                SELECT id, image_path, task_id, request_id, coordinates, address,
+                       ocr_result, buildings, processed_at, error
+                FROM processing_results
+                WHERE owner_id = :owner_id
+                ORDER BY processed_at DESC
+                LIMIT 1000
+                """
+            )
+            result = db.execute(query, {"owner_id": owner_id})
+        
+        rows = result.fetchall()
+        db.close()
+
+        # Преобразуем данные в DataFrame
+        data = []
+        for row in rows:
+            # Преобразуем JSON поля в строки для экспорта
+            coords = json.loads(row.coordinates) if isinstance(row.coordinates, str) else row.coordinates
+            ocr = json.loads(row.ocr_result) if isinstance(row.ocr_result, str) else row.ocr_result
+            buildings = json.loads(row.buildings) if isinstance(row.buildings, str) else row.buildings
+
+            data.append(
+                {
+                    "ID": row.id,
+                    "Путь к изображению": row.image_path,
+                    "ID задачи": row.task_id,
+                    "ID запроса": row.request_id,
+                    "Широта": coords.get("lat") if coords else None,
+                    "Долгота": coords.get("lon") if coords else None,
+                    "Адрес": row.address,
+                    "OCR результат": str(ocr) if ocr else None,
+                    "Здания": str(buildings) if buildings else None,
+                    "Дата обработки": (
+                        row.processed_at.isoformat()
+                        if hasattr(row.processed_at, "isoformat")
+                        else str(row.processed_at)
+                    ),
+                    "Ошибка": row.error,
+                }
+            )
+
+        df = pd.DataFrame(data)
+
+        # Создаем буфер для XLSX файла
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="Результаты обработки")
+
+        buffer.seek(0)
+
+        # Возвращаем файл как ответ
+        headers = {
+            "Content-Disposition": 'attachment; filename="processing_results.xlsx"',
+            "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }
+
+        return StreamingResponse(buffer, headers=headers)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка экспорта в XLSX: {str(e)}")
 
 
 if __name__ == "__main__":

@@ -1,9 +1,15 @@
 // Workbench JavaScript functionality
 
+// Global variable to store current workspace
+let currentWorkspace = null;
+let workspaces = [];
+
 document.addEventListener('DOMContentLoaded', function() {
     // Get DOM elements
     const uploadButton = document.getElementById('upload-button');
+    const zipButton = document.getElementById('zip-button');
     const photoUploadInput = document.getElementById('photo-upload');
+    const zipUploadInput = document.getElementById('zip-upload');
     const photoGrid = document.getElementById('photo-grid');
     const uploadStatus = document.getElementById('upload-status');
     const addPhotoCard = document.getElementById('add-photo-card');
@@ -26,12 +32,25 @@ document.addEventListener('DOMContentLoaded', function() {
     uploadButton.addEventListener('click', function() {
         photoUploadInput.click();
     });
+
+    zipButton.addEventListener('click', function() {
+        zipUploadInput.click();
+    });
     
     // Event listener for file selection
     photoUploadInput.addEventListener('change', function(event) {
         const file = event.target.files[0];
         if (file) {
             uploadPhoto(file);
+        }
+    });
+
+    // Event listener for file selection
+    zipUploadInput.addEventListener('change', function(event) {
+        const file = event.target.files[0];
+        if (file) {
+            uploadZip(file);
+            //123
         }
     });
     
@@ -73,7 +92,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const formData = new FormData();
         formData.append('file', file);
         
-        fetch('/api/photo_upload', {
+        // Добавляем workspace_id если выбрана рабочая область
+        let url = '/api/photo_upload';
+        if (currentWorkspace) {
+            url += `?workspace_id=${currentWorkspace.id}`;
+        }
+        
+        fetch(url, {
             method: 'POST',
             body: formData
         })
@@ -87,7 +112,9 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             uploadStatus.textContent = 'Загрузка успешна!';
             uploadStatus.className = 'upload-status success';
-            loadPhotos(); // Refresh photo grid
+            return loadPhotos(1, 10); // Refresh photo grid
+        })
+        .then(() => {
             photoUploadInput.value = ''; // Reset file input to allow re-upload of same file
             setTimeout(() => {
                 uploadStatus.textContent = '';
@@ -101,10 +128,86 @@ document.addEventListener('DOMContentLoaded', function() {
             photoUploadInput.value = ''; // Reset file input to allow re-upload of same file
         });
     }
+
+        // Function to upload photo
+    function uploadZip(file) {
+        uploadStatus.textContent = 'Загрузка...';
+        uploadStatus.className = 'upload-status uploading';
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        // Добавляем workspace_id если выбрана рабочая область
+        let url = '/api/zip_upload';
+        if (currentWorkspace) {
+            url += `?workspace_id=${currentWorkspace.id}`;
+        }
+        
+        fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (response.ok) {
+                return response.json();
+            } else {
+                throw new Error('Upload failed');
+            }
+        })
+        .then(data => {
+            uploadStatus.textContent = 'Загрузка успешна!';
+            uploadStatus.className = 'upload-status success';
+            return loadPhotos(1, 10); // Refresh photo grid
+        })
+        .then(() => {
+            zipUploadInput.value = ''; // Reset file input to allow re-upload of same file
+            setTimeout(() => {
+                uploadStatus.textContent = '';
+                uploadStatus.className = 'upload-status';
+            }, 3000);
+        })
+        .catch(error => {
+            uploadStatus.textContent = 'Загрузка не удалась. Пожалуйста, попробуйте снова.';
+            uploadStatus.className = 'upload-status error';
+            console.error('Ошибка загрузки:', error);
+            zipUploadInput.value = ''; // Reset file input to allow re-upload of same file
+        });
+    }
     
-    // Function to load photos
-    function loadPhotos() {
-        fetch('/api/photos', {
+    // Function to load photos with pagination
+    function loadPhotos(page = 1, limit = 10) {
+        const photoGrid = document.getElementById('photo-grid');
+        
+        // Show loading indicator
+        const loadingElement = document.createElement('div');
+        loadingElement.className = 'loading';
+        loadingElement.textContent = 'Загрузка фотографий...';
+        loadingElement.id = 'photos-loading';
+        
+        // Clear existing photos except the add photo card and pagination
+        const addPhotoCard = document.getElementById('add-photo-card');
+        const paginationContainer = document.getElementById('pagination-container');
+        
+        // Store references and remove pagination temporarily
+        const nextSibling = paginationContainer ? paginationContainer.nextSibling : null;
+        if (paginationContainer) {
+            paginationContainer.remove();
+        }
+        
+        // Clear photo grid but keep add photo card
+        photoGrid.innerHTML = '';
+        if (addPhotoCard) {
+            photoGrid.appendChild(addPhotoCard);
+        }
+        photoGrid.appendChild(loadingElement);
+        
+        // Добавляем workspace_id если выбрана рабочая область
+        let url = `/api/photos?page=${page}&limit=${limit}`;
+        if (currentWorkspace) {
+            url += `&workspace_id=${currentWorkspace.id}`;
+        }
+        
+        return fetch(url, {
             method: 'GET',
             credentials: 'include'
         })
@@ -113,8 +216,8 @@ document.addEventListener('DOMContentLoaded', function() {
             // Для каждого фото запрашиваем результаты обработки
             const photosWithResults = data.photos.map(photo => {
                 return fetch(`/api/results/photo/${photo.id}`, {
-                    method: 'GET',
-                    credentials: 'include'
+                method: 'GET',
+                credentials: 'include'
                 })
                 .then(response => {
                     if (response.ok) {
@@ -133,18 +236,47 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             
             // Ждем завершения всех запросов
-            Promise.all(photosWithResults)
-                .then(photos => {
-                    displayPhotos(photos);
-                });
+            return Promise.all(photosWithResults);
+        })
+        .then(photos => {
+            // Remove loading indicator
+            const loadingElement = document.getElementById('photos-loading');
+            if (loadingElement) {
+                loadingElement.remove();
+            }
+            
+            // Re-add pagination container if it existed
+            if (paginationContainer) {
+                photoGrid.parentNode.insertBefore(paginationContainer, photoGrid.nextSibling);
+            }
+            
+            displayPhotos(photos, page, limit);
         })
         .catch(error => {
             console.error('Error loading photos:', error);
+            // Remove loading indicator
+            const loadingElement = document.getElementById('photos-loading');
+            if (loadingElement) {
+                loadingElement.remove();
+            }
+            
+            // Re-add pagination container if it existed
+            if (paginationContainer) {
+                photoGrid.parentNode.insertBefore(paginationContainer, photoGrid.nextSibling);
+            }
+            
+            // Show error message
+            const errorElement = document.createElement('div');
+            errorElement.className = 'error';
+            errorElement.textContent = 'Ошибка загрузки фотографий';
+            photoGrid.appendChild(errorElement);
+            
+            throw error; // Re-throw to be caught by caller
         });
     }
     
-    // Function to display photos in grid
-    function displayPhotos(photos) {
+    // Function to display photos in grid with pagination
+    function displayPhotos(photos, currentPage = 1, limit = 10) {
         // Clear existing photos except the add photo card
         photoGrid.innerHTML = '';
         photoGrid.appendChild(addPhotoCard);
@@ -182,6 +314,67 @@ document.addEventListener('DOMContentLoaded', function() {
             
             photoGrid.insertBefore(photoCard, addPhotoCard);
         });
+        
+        // Add pagination controls after the photo grid
+        displayPagination(currentPage, limit, photos.length);
+    }
+    
+    // Function to display pagination controls
+    function displayPagination(currentPage, limit, photoCount) {
+        // Create pagination container if it doesn't exist
+        let paginationContainer = document.getElementById('pagination-container');
+        if (!paginationContainer) {
+            paginationContainer = document.createElement('div');
+            paginationContainer.id = 'pagination-container';
+            paginationContainer.className = 'pagination-container';
+            photoGrid.parentNode.insertBefore(paginationContainer, photoGrid.nextSibling);
+        }
+        
+        // Clear existing pagination controls
+        paginationContainer.innerHTML = '';
+        
+        // Create pagination controls
+        const paginationControls = document.createElement('div');
+        paginationControls.className = 'pagination-controls';
+        
+        // Previous button
+        if (currentPage > 1) {
+            const prevButton = document.createElement('button');
+            prevButton.className = 'pagination-button';
+            prevButton.textContent = 'Назад';
+            prevButton.addEventListener('click', function() {
+                loadPhotos(currentPage - 1, limit);
+            });
+            paginationControls.appendChild(prevButton);
+        }
+        
+        // Page numbers (show up to 5 pages around current page)
+        const startPage = Math.max(1, currentPage - 2);
+        const endPage = startPage + 4;
+        
+        for (let i = startPage; i <= endPage; i++) {
+            const pageButton = document.createElement('button');
+            pageButton.className = 'pagination-button' + (i === currentPage ? ' active' : '');
+            pageButton.textContent = i;
+            pageButton.addEventListener('click', function() {
+                loadPhotos(i, limit);
+            });
+            paginationControls.appendChild(pageButton);
+        }
+        
+        // Next button (always show if there might be more photos)
+        // We'll show it if we got exactly 10 photos (might be more on next page)
+        if (photoCount === limit) {
+            const nextButton = document.createElement('button');
+            nextButton.className = 'pagination-button';
+            nextButton.textContent = 'Вперед';
+            nextButton.addEventListener('click', function() {
+                loadPhotos(currentPage + 1, limit);
+            });
+            paginationControls.appendChild(nextButton);
+        }
+        
+        paginationContainer.appendChild(paginationControls);
     }
     
     // Function to open photo in modal
@@ -209,8 +402,38 @@ document.addEventListener('DOMContentLoaded', function() {
                     captionHtml += `<p class="modal-processed"><strong>Обработано:</strong> ${new Date(photo.processing_result.processed_at).toLocaleString()}</p>`;
                 }
             }
+
         } else {
-            captionHtml += `<p class="modal-info">Результаты обработки еще не доступны</p>`;
+            // Extract photo ID from URL (assuming format: .../photo_id.jpg)
+            const urlParts = photo.photo_url.split('/');
+            const photoId = urlParts[urlParts.length - 1];
+            // Fetch address from API request and take 5th index
+            fetch(`/results/photo/${photoId}`)
+                .then(response => response.json())
+                .then(data => {
+                    let addressInfo = 'Результаты обработки еще не доступны';
+                    if (data && data.length > 4 && data[5]) {
+                        // Taking the 5th index from the response
+                        const fifthIndexData = data[5];
+                        if (fifthIndexData.address) {
+                            addressInfo = fifthIndexData.address;
+                        } else if (typeof fifthIndexData === 'string') {
+                            addressInfo = fifthIndexData;
+                        } else {
+                            addressInfo = JSON.stringify(fifthIndexData);
+                        }
+                    }
+                    captionHtml += `<p class="modal-info"><strong>Адрес:</strong> ${addressInfo}</p>`;
+                    modalCaption.innerHTML = captionHtml;
+                    modal.style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Ошибка получения адреса:', error);
+                    captionHtml += `<p class="modal-info">Результаты обработки еще не доступны</p>`;
+                    modalCaption.innerHTML = captionHtml;
+                    modal.style.display = 'block';
+                });
+            return;
         }
         
         modalCaption.innerHTML = captionHtml;
@@ -294,8 +517,8 @@ document.addEventListener('DOMContentLoaded', function() {
         window.location.href = '/export/results/xlsx';
     }
     
-    // Load photos when page loads
-    loadPhotos();
+    // Load photos when page loads with pagination
+    loadPhotos(1, 10);
     
     // Function to check for photo processing results every second
     function checkPhotoStatus() {
@@ -386,4 +609,167 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Run the checkPhotoStatus function every second
     setInterval(checkPhotoStatus, 1000);
+
+    // Workspace functionality
+    const sidebarActions = document.querySelector('.sidebar-actions');
+    
+    // Create workspace button
+    const createWorkspaceButton = document.createElement('button');
+    createWorkspaceButton.textContent = `+ Создать рабочую область`;
+    createWorkspaceButton.className = 'action-button';
+    sidebarActions.appendChild(createWorkspaceButton);
+    
+    // Workspace selector container
+    const workspaceSelectorContainer = document.createElement('div');
+    workspaceSelectorContainer.className = 'workspace-selector-container';
+    workspaceSelectorContainer.style.marginTop = '20px';
+    sidebarActions.appendChild(workspaceSelectorContainer);
+    
+    // Load workspaces and set up event listeners
+    loadWorkspaces();
+    
+    // Event listener for create workspace button
+    createWorkspaceButton.addEventListener('click', function() {
+        const workspaceName = prompt('Введите название новой рабочей области:');
+        if (workspaceName) {
+            createWorkspace(workspaceName);
+        }
+    });
+    // Function to load workspaces
+function loadWorkspaces() {
+    fetch('/api/workspaces', {
+        method: 'GET',
+        credentials: 'include'
+    })
+    .then(response => response.json())
+    .then(data => {
+        workspaces = data.workspaces;
+        displayWorkspaceSelector();
+    })
+    .catch(error => {
+        console.error('Ошибка загрузки рабочих областей:', error);
+    });
+}
+
+// Function to display workspace selector
+function displayWorkspaceSelector() {
+    const workspaceSelectorContainer = document.querySelector('.workspace-selector-container');
+    if (!workspaceSelectorContainer) return;
+    
+    // Clear existing content
+    workspaceSelectorContainer.innerHTML = '';
+    
+    // Add title
+    const title = document.createElement('h3');
+    title.textContent = 'Рабочие области';
+    title.style.marginTop = '0';
+    title.style.marginBottom = '10px';
+    workspaceSelectorContainer.appendChild(title);
+    
+    // Add workspace buttons
+    workspaces.forEach(workspace => {
+        const workspaceButton = document.createElement('button');
+        workspaceButton.textContent = workspace.name;
+        workspaceButton.className = 'action-button';
+        workspaceButton.style.marginBottom = '8px';
+        workspaceButton.style.backgroundColor = currentWorkspace && currentWorkspace.id === workspace.id ? 'var(--primary)' : '';
+        
+        workspaceButton.addEventListener('click', function() {
+            switchWorkspace(workspace);
+        });
+        
+        workspaceSelectorContainer.appendChild(workspaceButton);
+    });
+}
+
+// Function to create a new workspace
+function createWorkspace(name) {
+    const requestData = {
+        name: name
+    };
+    
+    fetch('/api/workspaces', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData),
+        credentials: 'include'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Reload workspaces
+            loadWorkspaces();
+            // Switch to the new workspace
+            switchWorkspace(data.workspace);
+        } else {
+            alert('Не удалось создать рабочую область: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка создания рабочей области:', error);
+        alert('Произошла ошибка при создании рабочей области');
+    });
+}
+
+// Function to switch workspace
+function switchWorkspace(workspace) {
+    // Show loading indicator
+    const photoGrid = document.getElementById('photo-grid');
+    const originalContent = photoGrid.innerHTML;
+    photoGrid.innerHTML = '<div class="loading">Загрузка рабочей области...</div>';
+    
+    // Update current workspace
+    currentWorkspace = workspace;
+    
+    // Update UI to show selected workspace
+    displayWorkspaceSelector();
+
+    console.log("Loading workspace");
+
+    // Reload photos for the new workspace
+    loadPhotos(1, 10).then(() => {
+        // Hide loading indicator after photos are loaded
+        // The loading message will be automatically replaced by loadPhotos
+    }).catch(error => {
+        console.error('Ошибка загрузки фотографий:', error);
+        photoGrid.innerHTML = originalContent; // Restore original content on error
+        alert('Не удалось загрузить фотографии для выбранной рабочей области');
+    });
+    
+    console.log("After Loading instructions");
+
+    // Update export button to use current workspace
+    const exportXlsxButton = document.getElementById('export-xlsx-button');
+    if (exportXlsxButton) {
+        exportXlsxButton.onclick = function() {
+            exportToXlsx(workspace.id);
+        };
+    }
+    
+    // Clear search results when switching workspace
+    const searchResults = document.getElementById('search-results');
+    if (searchResults) {
+        searchResults.innerHTML = '';
+    }
+    
+    // Reset upload statuses
+    const uploadStatus = document.getElementById('upload-status');
+    const zipStatus = document.getElementById('zip-status');
+    if (uploadStatus) uploadStatus.textContent = '';
+    if (zipStatus) zipStatus.textContent = '';
+}
+
+// Modified exportToXlsx function to use workspace
+function exportToXlsx(workspaceId = null) {
+    let url = '/export/results/xlsx';
+    if (workspaceId) {
+        url += `?workspace_id=${workspaceId}`;
+    }
+    window.location.href = url;
+}
+
+
 });
+
