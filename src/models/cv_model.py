@@ -135,10 +135,11 @@ class CVModel:
 
     def __init__(
         self,
-        faiss_index_path: str = "data/index/faiss_index.bin",
-        mapping_path: str = "data/index/image_mapping.csv",
+        faiss_index_path: str = "data/index/faiss_index_fine_tuned_optimized.bin",
+        mapping_path: str = "data/index/image_mapping_fine_tuned_optimized.csv",
         train_metadata_path: str = "data/processed/moscow_images.csv",
         database_url: str = None,
+        model_path: str = "models/fine_tuned_geoclip_moscow_optimized.pth",
     ):
         """
         Инициализация модели: загрузка GeoCLIP и FAISS индекса.
@@ -149,6 +150,21 @@ class CVModel:
         # Инициализация GeoCLIP
         self.image_encoder = ImageEncoder().to(self.device).eval()
         logger.info("GeoCLIP модель инициализирована")
+        
+        # Загрузка дообученных весов, если указан путь к модели
+        if model_path and os.path.exists(model_path):
+            try:
+                checkpoint = torch.load(model_path, map_location=self.device)
+                if 'model_state_dict' in checkpoint:
+                    self.image_encoder.load_state_dict(checkpoint['model_state_dict'])
+                else:
+                    self.image_encoder.load_state_dict(checkpoint)
+                logger.info(f"Загружены дообученные веса из {model_path}")
+            except Exception as e:
+                logger.error(f"Ошибка загрузки дообученной модели из {model_path}: {e}")
+                raise
+        elif model_path:
+            logger.warning(f"Файл дообученной модели не найден: {model_path}")
 
         # Создаем трансформации для изображений
         self.transform = transforms.Compose(
@@ -366,9 +382,14 @@ class CVModel:
         return {"text": "ТЕКСТ НЕ РАСПОЗНАН", "confidence": 0.0, "roi_name": "full_image"}
 
 
-def create_cv_model() -> CVModel:
+def create_cv_model(model_path: str = "models/fine_tuned_geoclip_moscow_optimized.pth") -> CVModel:
     """
     Фабричная функция для создания экземпляра CVModel
+
+    Параметры
+    ----------
+    model_path : str, optional
+        Путь к файлу дообученной модели, по умолчанию None
 
     Возвращает
     -------
@@ -379,5 +400,9 @@ def create_cv_model() -> CVModel:
     --------
     >>> model = create_cv_model()
     >>> result = model.process_image("path/to/image.jpg")
+    >>>
+    >>> # С дообученной моделью
+    >>> model = create_cv_model("models/fine_tuned_geoclip.pth")
+    >>> result = model.process_image("path/to/image.jpg")
     """
-    return CVModel()
+    return CVModel(model_path=model_path)

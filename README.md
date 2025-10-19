@@ -306,8 +306,8 @@ Content-Type: application/json
 #### Загрузка данных из S3
 
 Модель загружает необходимые данные из S3 по следующим путям:
-- `processed_data/models/index/faiss_index.bin` - FAISS индекс
-- `processed_data/models/index/image_mapping.csv` - Маппинг изображений
+- `processed_data/models/index/faiss_index_fine_tuned_optimized.bin` - FAISS индекс
+- `processed_data/models/index/image_mapping_fine_tuned_optimized.csv` - Маппинг изображений
 - `processed_data/moscow_images.csv` - Метаданные изображений
 
 ## Разработка
